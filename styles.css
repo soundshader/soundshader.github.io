@@ -3,23 +3,29 @@ html, body {
   height: 100%;
   padding: 0;
   margin: 0;
+  background: #111;
 }
 
 canvas {
   max-width: 100%;
   max-height: 100%;
   background: #000;
+  position: fixed;
 }
 
 @media screen and (orientation:portrait) {
   canvas {
     width: 100%;
+    top: 50vh;
+    transform: translateY(-50%);
   }
 }
 
 @media screen and (orientation:landscape) {
   canvas {
     height: 100%;
+    left: 50vw;
+    transform: translateX(-50%);
   }
 }
 

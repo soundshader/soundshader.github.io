@@ -32,7 +32,11 @@ function setMouseHandlers() {
     controller.start(stream);
   };
 
-  canvas.onclick = async () => {
+  canvas.onclick = async e => {
+    let x = e.clientX / canvas.clientWidth - 0.5;
+    let y = 0.5 - e.clientY / canvas.clientHeight;
+    console.log('canvas click:', x.toFixed(3), y.toFixed(3));
+
     let controller = getAudioController();
 
     // pause / resume already running audio

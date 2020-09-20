@@ -3,11 +3,12 @@ import { GpuContext } from "../webgl/gpu-context.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuSpectrogramProgram } from "../glsl/spectrogram.js";
 import { GpuPatternAudioProgram } from "../glsl/pattern-audio.js";
+import { GpuChromagramProgram } from "../glsl/chromagram.js";
 
 // Uses WebAudio's getFloatTimeDomainData() to read the raw audio samples
 // and then applies FFT to compute amplitudes and phases (important!).
 export class AudioController {
-  constructor(canvas, { stats, fftSize = 1024 }) {
+  constructor(canvas, { stats, fftSize }) {
     this.canvas = canvas;
     this.stats = stats;
     this.fftHalfSize = fftSize / 2;
@@ -52,52 +53,44 @@ export class AudioController {
   initGpu() {
     this.webgl.init();
 
-    // FFT[time, freq] magnitide + phase
-    this.fftArrayBuffer = new Float32Array(2 * this.fftHalfSize ** 2);
-    this.fftArrayBuffer.fill(-10);
+    // FFT[freq], for the latest audio sample
+    this.fftArrayBuffer = new Float32Array(2 * this.fftHalfSize);
     this.fftFrameBuffer = new GpuFrameBuffer(this.webgl, {
-      size: this.fftHalfSize,
+      width: 1,
+      height: this.fftHalfSize,
       channels: 2,
       source: this.fftArrayBuffer,
     });
 
-    // FFT[freq], for the latest audio sample
-    this.fftLineArrayBuffer = new Float32Array(2 * this.fftHalfSize);
-    this.fftLineArrayBuffer.fill(-10);
-    this.fftLineFrameBuffer = new GpuFrameBuffer(this.webgl, {
-      width: 1,
-      height: this.fftHalfSize,
-      channels: 2,
-      source: this.fftLineArrayBuffer,
-    });
+    let args = {
+      size: this.fftHalfSize,
+      maxFreq: this.maxFreq,
+    };
 
-    this.audioRenderers = [
-      new GpuPatternAudioProgram(this.webgl, { size: this.fftHalfSize }),
-      new GpuSpectrogramProgram(this.webgl),
+    this.renderers = [
+      new GpuPatternAudioProgram(this.webgl, args),
+      new GpuSpectrogramProgram(this.webgl, args),
+      new GpuChromagramProgram(this.webgl, args),
     ];
 
-    this.selectedRendererId = 0;
+    this.rendererId = 0;
   }
 
   switchAudioRenderer() {
-    this.selectedRendererId = (this.selectedRendererId + 1)
-      % this.audioRenderers.length;
+    this.rendererId = (this.rendererId + 1)
+      % this.renderers.length;
   }
 
   drawFrame() {
-    let node = this.audioRenderers[this.selectedRendererId];
+    let node = this.renderers[this.rendererId];
     let time = this.timeStep / this.maxTime;
 
     node.exec({
-      uTimeStep: 1.0, // seconds
       uTime: time,
       uMousePos: [this.mouseX, this.mouseY],
-      uFFT: this.fftLineFrameBuffer,
-      uInput: this.fftFrameBuffer,
-      uSize: [this.fftFrameBuffer.width, this.fftFrameBuffer.height],
-      uMaxTime: this.maxTime * 1 / 60, // audio captured at 60 fps
+      uFFT: this.fftFrameBuffer,
+      uMaxTime: this.maxTime / 60, // audio captured at 60 fps
       uMaxFreq: this.maxFreq,
-      uHalfRange: 440 / this.maxFreq, // the A4 piano note = 440 Hz
     }, null);
   }
 
@@ -162,7 +155,6 @@ export class AudioController {
 
   captureFrame() {
     let n = this.fftHalfSize * 2;
-    let t = this.timeStep % this.maxTime;
 
     this.waveform.fill(0);
     this.analyser.getFloatTimeDomainData(this.waveform);
@@ -182,12 +174,8 @@ export class AudioController {
       let arg = !mag ? 0 : Math.acos(re / mag);
       if (im < 0) arg = -arg;
 
-      this.fftLineArrayBuffer[i * 2] = mag;
-      this.fftLineArrayBuffer[i * 2 + 1] = arg;
-
-      let j = i * this.maxTime + t;
-      this.fftArrayBuffer[j * 2] = mag;
-      this.fftArrayBuffer[j * 2 + 1] = arg;
+      this.fftArrayBuffer[i * 2] = mag;
+      this.fftArrayBuffer[i * 2 + 1] = arg;
     }
   }
 }

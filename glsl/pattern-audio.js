@@ -2,33 +2,48 @@ import { GpuTransformProgram } from "../webgl/transform.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 
 export class GpuPatternAudioProgram {
-  constructor(webgl, { size }) {
+  constructor(webgl, { size, maxFreq }) {
     this.webgl = webgl;
+    this.samples = 6; // must be a divisor of 12
     this.buffer = new GpuFrameBuffer(webgl, { size });
-    this.pattern = new GpuPatternProgram(webgl);
+    this.pattern = new GpuPatternProgram(webgl, { maxFreq, samples: this.samples });
     this.colorizer = new GpuColorizerProgram(webgl);
+
   }
 
-  exec({ uFFT, uMaxFreq, uMousePos }, output) {
+  exec({ uFFT, uMousePos }, output) {
     this.buffer.clear();
     let gl = this.webgl.gl;
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);
 
+    // The C4 note, aka "middle C".
+    let base = 440 * 2.0 ** 0.25;
+
     // These 7 octaves from 55 Hz to 7 kHz usually
     // contain all the audible sound. Music usually
     // uses a very narrow band around 440 Hz. Birds
-    // often use high frequencies, but wren doesn't
-    // go above note A8 (7040 Hz).
+    // often get to high frequencies, but even wren
+    // doesn't go above note A8 (7040 Hz).
     for (let k = -2; k < 4; k++) {
-      this.pattern.exec({
-        uFFT,
-        uMaxFreq,
-        uMousePos,
-        uFreqLo: 440 * 2 ** k,
-        uFreqHi: 440 * 2 ** (k + 1),
-      }, this.buffer);
+      // GPU doesn't like shaders that do 10+ texture
+      // lookups. Things work much faster if lookups
+      // are split into individual shader calls that
+      // do only few lookups. However GPU doesn't like
+      // too many shader calls either, so there's an
+      // optimal number of texture lookups per call,
+      // which is usually around 4-6.
+      let n = 12 / this.samples;
+
+      for (let i = 0; i < n; i++) {
+        this.pattern.exec({
+          uFFT,
+          uMousePos,
+          uFreqLo: base * 2 ** (k + i / n),
+          uFreqHi: base * 2 ** (k + (i + 1) / n),
+        }, this.buffer);
+      }
     }
 
     gl.disable(gl.BLEND);
@@ -41,30 +56,31 @@ export class GpuPatternAudioProgram {
 }
 
 class GpuPatternProgram extends GpuTransformProgram {
-  constructor(glctx) {
-    super(glctx, {
+  constructor(webgl, { maxFreq, samples }) {
+    super(webgl, {
       fshader: `
         in vec2 v;
         
         uniform sampler2D uFFT; // 1 x FFT size
-        uniform float uMaxFreq; // ~22.5 kHz
         uniform float uFreqLo; // e.g. 220 Hz
         uniform float uFreqHi; // e.g. 440 Hz
 
         const float PI = ${Math.PI};
-        const int SAMPLES = 12;
+        const float MAX_FREQ = float(${maxFreq});
+        const float FREQ_MOD = 15.0;
+        const float FREQ_EXP = 200.0;
+        const int SAMPLES = ${samples};
 
         float freqShape(vec2 v, float freq, float phase) {
-          float freq_mod = 15.0;
-          float s1 = ceil(freq / freq_mod);
+          float s1 = ceil(freq / FREQ_MOD);
           float s2 = ceil(1e3 / freq);
-          float r0 = pow(freq / uMaxFreq, 0.2);
+          float r0 = pow(freq / MAX_FREQ, 0.2);
 
           float r = length(v);
           float a = atan(v.y, v.x);
 
           return cos(a*s1 + phase) * sin(PI*r*s2)
-            * exp(-250.0 * pow(r - r0, 2.0));
+            * exp(-FREQ_EXP * pow(r - r0, 2.0));
         }
 
         float sumShape(vec2 v) {
@@ -75,10 +91,10 @@ class GpuPatternProgram extends GpuTransformProgram {
               log2(uFreqLo), log2(uFreqHi),
               float(i) / float(SAMPLES));
             float freq = pow(2.0, freq_log);
-            vec2 tex = texture(uFFT, vec2(0.5, freq / uMaxFreq)).xy;
-            float mag = tex.x;
+            vec2 tex = texture(uFFT, vec2(0.5, freq / MAX_FREQ)).xy;
+            float vol = tex.x;
             float arg = tex.y;
-            sum += mag * freqShape(v, freq, arg);
+            sum += vol * freqShape(v, freq, arg);
           }
 
           return sum / float(SAMPLES);
@@ -94,8 +110,8 @@ class GpuPatternProgram extends GpuTransformProgram {
 }
 
 class GpuColorizerProgram extends GpuTransformProgram {
-  constructor(glctx) {
-    super(glctx, {
+  constructor(webgl) {
+    super(webgl, {
       fshader: `
         in vec2 vTex;
 
