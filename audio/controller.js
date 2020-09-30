@@ -4,6 +4,7 @@ import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuSpectrogramProgram } from "../glsl/spectrogram.js";
 import { GpuPatternAudioProgram } from "../glsl/pattern-audio.js";
 import { GpuChromagramProgram } from "../glsl/chromagram.js";
+import { GpuRadialHarmonicsProgram } from "../glsl/radial-harmonics.js";
 
 // Uses WebAudio's getFloatTimeDomainData() to read the raw audio samples
 // and then applies FFT to compute amplitudes and phases (important!).
@@ -70,6 +71,7 @@ export class AudioController {
     this.renderers = [
       new GpuPatternAudioProgram(this.webgl, args),
       new GpuSpectrogramProgram(this.webgl, args),
+      new GpuRadialHarmonicsProgram(this.webgl, args),
       new GpuChromagramProgram(this.webgl, args),
     ];
 

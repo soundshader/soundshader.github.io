@@ -94,7 +94,7 @@ async function selectAudioFile() {
   console.log('Creating an <input> to pick a file');
   let input = document.createElement('input');
   input.type = 'file';
-  input.accept = 'audio/mpeg';
+  input.accept = 'audio/mpeg; audio/wav; audio/webm';
   input.click();
 
   let file = await new Promise((resolve, reject) => {

@@ -101,7 +101,7 @@ export class GpuProgram {
     if (row) {
       let lines = source.split(/\n/g);
       let line = lines[+row - 1];
-      console.info('Error at line ' + row + ':', line.trim());
+      console.warn('Error at line ' + row + ':', line.trim());
     }
 
     console.groupCollapsed('Failed shader:');
