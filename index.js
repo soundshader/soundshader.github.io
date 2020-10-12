@@ -48,11 +48,12 @@ function setMouseHandlers() {
       return;
     }
 
-    let { audio, stream } = await selectAudioFile();
+    let { audio, stream, file } = await selectAudioFile();
     if (!stream) return;
+
     audio.loop = true;
     audio.play();
-    controller.start(stream);
+    controller.start(stream, file);
   };
 }
 
@@ -105,7 +106,8 @@ async function selectAudioFile() {
   });
 
   if (!file) return {};
-  console.log('Selected file:', file.type, file.size, 'bytes');
+  console.log('Selected file:', file.type, file.size, 'bytes', file.name);
+  document.title = file.name;
 
   console.log('Creating an <audio> element to render the file');
   let audio = document.createElement('audio');

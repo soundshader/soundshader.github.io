@@ -5,6 +5,9 @@ import { GpuSpectrogramProgram } from "../glsl/spectrogram.js";
 import { GpuPatternAudioProgram } from "../glsl/pattern-audio.js";
 import { GpuChromagramProgram } from "../glsl/chromagram.js";
 import { GpuRadialHarmonicsProgram } from "../glsl/radial-harmonics.js";
+import { FWT } from "./fwt.js";
+
+const USE_FWT = 0;
 
 // Uses WebAudio's getFloatTimeDomainData() to read the raw audio samples
 // and then applies FFT to compute amplitudes and phases (important!).
@@ -18,7 +21,6 @@ export class AudioController {
   init() {
     let fftSize = this.fftHalfSize * 2;
 
-    this.webgl = new GpuContext(this.canvas);
     this.audioCtx = new AudioContext();
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = fftSize;
@@ -29,12 +31,17 @@ export class AudioController {
     this.started = false;
     this.timeStep = 0;
 
+    if (USE_FWT) this.fwt = new FWT(this.fftHalfSize, {
+      context: this.audioCtx,
+      canvas: this.canvas,
+    });
+
     this.fft = new FFT(fftSize);
     this.waveform = new Float32Array(fftSize);
     this.fftInput = new Float32Array(fftSize * 2);
     this.fftOutput = new Float32Array(fftSize * 2);
 
-    this.initGpu();
+    if (!USE_FWT) this.initGpu();
     this.initMouse();
   }
 
@@ -52,6 +59,7 @@ export class AudioController {
   }
 
   initGpu() {
+    this.webgl = new GpuContext(this.canvas);
     this.webgl.init();
 
     // FFT[freq], for the latest audio sample
@@ -71,8 +79,8 @@ export class AudioController {
     this.renderers = [
       new GpuPatternAudioProgram(this.webgl, args),
       new GpuSpectrogramProgram(this.webgl, args),
-      new GpuRadialHarmonicsProgram(this.webgl, args),
-      new GpuChromagramProgram(this.webgl, args),
+      // new GpuRadialHarmonicsProgram(this.webgl, args),
+      // new GpuChromagramProgram(this.webgl, args),
     ];
 
     this.rendererId = 0;
@@ -96,7 +104,13 @@ export class AudioController {
     }, null);
   }
 
-  async start(audioStream) {
+  async start(audioStream, audioFile) {
+    if (USE_FWT) {
+      await this.fwt.init(audioFile);
+      await this.fwt.render();
+      return;
+    }
+
     this.stream = audioStream;
     this.source = this.audioCtx.createMediaStreamSource(this.stream);
     this.source.connect(this.analyser);
