@@ -4,6 +4,7 @@
 // but could be be made a lot faster with WASM or GLSL.
 export class FFT {
   static instances = new Map;
+  static wasm = { size: 0, src: 0, res: 0, src_view: null, res_view: null };
 
   static get(size) {
     let fft = FFT.instances.get(size);
@@ -22,6 +23,26 @@ export class FFT {
   }
 
   static inverse(src, res = src.slice(0)) {
+    if (_fft_init) {
+      let n = src.length / 2;
+
+      if (!FFT.wasm.size) {
+        FFT.wasm.size = n;
+        _fft_init(n);
+        FFT.wasm.src = _malloc(2 * n * 4);
+        FFT.wasm.res = _malloc(2 * n * 4);
+        let src_base = FFT.wasm.src / 4;
+        let res_base = FFT.wasm.res / 4;
+        FFT.wasm.src_view = HEAPF32.subarray(src_base, src_base + n * 2);
+        FFT.wasm.res_view = HEAPF32.subarray(res_base, res_base + n * 2);
+      }
+
+      FFT.wasm.src_view.set(src); // js -> wasm
+      _fft_inverse(FFT.wasm.src, FFT.wasm.res);
+      res.set(FFT.wasm.res_view); // wasm -> js
+      return res;
+    }
+
     FFT.conjugate(src);
     FFT.forward(src, res);
     FFT.conjugate(src);
@@ -53,7 +74,7 @@ export class FFT {
     for (let i = 0; i < res.length; i++)
       res[i] = src[2 * i + 1];
     return res;
-  }  
+  }
 
   static abs(src, res) {
     let n = src.length / 2;

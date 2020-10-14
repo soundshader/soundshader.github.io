@@ -7,7 +7,7 @@ import { GpuChromagramProgram } from "../glsl/chromagram.js";
 import { GpuRadialHarmonicsProgram } from "../glsl/radial-harmonics.js";
 import { FWT } from "./fwt.js";
 
-const USE_FWT = 0;
+const USE_FWT = 1;
 
 // Uses WebAudio's getFloatTimeDomainData() to read the raw audio samples
 // and then applies FFT to compute amplitudes and phases (important!).

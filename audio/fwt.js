@@ -46,6 +46,7 @@ export class FWT {
   async drawArea(ymin = 0, ymax = this.canvas.height - 1) {
     let image = this.image;
     let time = Date.now();
+    let started = time;
 
     for (let y = ymin; y <= ymax; y++) {
       this.drawLine(y);
@@ -59,6 +60,7 @@ export class FWT {
     }
 
     this.context2d.putImageData(image, 0, 0);
+    console.log('FWT done in', Date.now() - started, 'ms');
   }
 
   drawLine(y = 0) {
@@ -128,7 +130,7 @@ export class FWT {
     let pi4 = Math.PI ** 0.25;
     let dt = 1 / 30;
     let m = 2 * Math.PI / dt;
-    
+
     this.wavelet_fft.fill(0);
 
     for (let k = 0; k <= n / 2; k++) {
