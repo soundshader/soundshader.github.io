@@ -43,6 +43,18 @@ export class FFT {
     return res;
   }
 
+  static re(src, res = new Float32Array(src.length / 2)) {
+    for (let i = 0; i < res.length; i++)
+      res[i] = src[2 * i];
+    return res;
+  }
+
+  static im(src, res = new Float32Array(src.length / 2)) {
+    for (let i = 0; i < res.length; i++)
+      res[i] = src[2 * i + 1];
+    return res;
+  }  
+
   static abs(src, res) {
     let n = src.length / 2;
     res = res || src.slice(0, n);
@@ -68,6 +80,23 @@ export class FFT {
       res[2 * i + 1] = re1 * im2 + re2 * im1;
     }
 
+    return res;
+  }
+
+  static exp(size, freq, shift = 0, res = new Float32Array(2 * size)) {
+    for (let k = 0; k < size; k++) {
+      res[2 * k + 0] = Math.cos(freq * (k - shift));
+      res[2 * k + 1] = Math.sin(freq * (k - shift));
+    }
+    return res;
+  }
+
+  static gaussian(size, sigma, shift = 0, res = new Float32Array(2 * size)) {
+    for (let k = 0; k < size; k++) {
+      let x = k < size / 2 ? k : k - size;
+      res[2 * k + 0] = Math.exp(-0.5 * ((x - shift) / sigma) ** 2);
+      res[2 * k + 1] = 0;
+    }
     return res;
   }
 
