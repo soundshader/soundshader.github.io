@@ -29,15 +29,20 @@ canvas {
   }
 }
 
-#mic {
-  cursor: pointer;
+#buttons {
   position: fixed;
   right: 0;
   top: 0;
+}
+
+button {
+  cursor: pointer;
   background: #444;
   color: #fff;
   padding: 1em;
   font-family: monospace;
+  border: none;
+  outline: none;
 }
 
 #stats:not(:empty) {
@@ -58,4 +63,11 @@ canvas {
   color: #fff;
   padding: 1em;
   font-family: monospace;
+}
+
+.selected-area {
+  position: fixed;
+  outline: 1px solid #444;
+  background: #080;
+  opacity: 0.2;
 }

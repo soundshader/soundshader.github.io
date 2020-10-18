@@ -1,14 +1,15 @@
+import * as vargs from './vargs.js';
 import { AudioController } from './audio/controller.js';
 
-let urlParams = new URLSearchParams(location.search);
-let divMic = document.querySelector('#mic');
+let btnUpload = document.querySelector('#upload');
+let btnMic = document.querySelector('#mic');
 let divStats = document.querySelector('#stats');
 let canvas = document.querySelector('canvas');
 let audioController = null; // use getAudioController()
 let keyboardHandlers = {};
 
 let config = {
-  size: urlParams.get('n') || 512,
+  size: vargs.SIZE,
   audio: true, // getUserMedia
 };
 
@@ -19,11 +20,11 @@ function main() {
   canvas.height = config.size;
   setKeyboardHandlers();
   setMouseHandlers();
-  divStats.textContent = 'Click the canvas to start.';
+  divStats.textContent = 'Select a mp3 file or use mic to start.';
 }
 
 function setMouseHandlers() {
-  divMic.onclick = async () => {
+  btnMic.onclick = async () => {
     let controller = getAudioController();
     controller.stop();
     let stream = await navigator.mediaDevices.getUserMedia(
@@ -47,6 +48,11 @@ function setMouseHandlers() {
         controller.resume();
       return;
     }
+  };
+
+  btnUpload.onclick = async () => {
+    let controller = getAudioController();
+    if (controller.started) return;
 
     let { audio, stream, file } = await selectAudioFile();
     if (!stream) return;
