@@ -1,4 +1,6 @@
+import * as vargs from '../vargs.js';
 import { FFT } from "./fft.js";
+import { CWT } from "./cwt.js";
 import { GpuContext } from "../webgl/gpu-context.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuSpectrogramProgram } from "../glsl/spectrogram.js";
@@ -21,7 +23,6 @@ export class AudioController {
   init() {
     let fftSize = this.fftHalfSize * 2;
 
-    this.webgl = new GpuContext(this.canvas);
     this.audioCtx = new AudioContext();
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = fftSize;
@@ -32,12 +33,22 @@ export class AudioController {
     this.started = false;
     this.timeStep = 0;
 
+    if (vargs.USE_CWT) {
+      this.cwt = new CWT(this.fftHalfSize, {
+        context: this.audioCtx,
+        canvas: this.canvas,
+        stats: this.stats,
+      });
+    }
+
     this.fft = new FFT(fftSize);
     this.waveform = new Float32Array(fftSize);
     this.fftInput = new Float32Array(fftSize * 2);
     this.fftOutput = new Float32Array(fftSize * 2);
 
-    this.initGpu();
+    if (!vargs.USE_CWT)
+      this.initGpu();
+
     this.initMouse();
   }
 
@@ -55,6 +66,7 @@ export class AudioController {
   }
 
   initGpu() {
+    this.webgl = new GpuContext(this.canvas);
     this.webgl.init();
 
     // FFT[freq], for the latest audio sample
@@ -71,17 +83,21 @@ export class AudioController {
       maxFreq: this.maxFreq,
     };
 
-    this.renderers = [
+    this.rendererId = 0;
+    this.renderers = [];
+
+    if (vargs.USE_FFT) {
+      this.renderers.push(
+        new GpuSpectrogramProgram(this.webgl, args));
+    }
+
+    this.renderers.push(
       new GpuPatternAudioProgram(this.webgl, args),
-      new GpuSpectrogramProgram(this.webgl, args),
       new GpuPolarHarmonicsProgram(this.webgl, args),
       new GpuZTransformProgram(this.webgl, args),
       new GpuHarmonicsProgram(this.webgl, args),
       new GpuRadialHarmonicsProgram(this.webgl, args),
-      new GpuChromagramProgram(this.webgl, args),
-    ];
-
-    this.rendererId = 0;
+      new GpuChromagramProgram(this.webgl, args));
   }
 
   switchAudioRenderer() {
@@ -102,7 +118,13 @@ export class AudioController {
     }, null);
   }
 
-  async start(audioStream) {
+  async start(audioStream, audioFile) {
+    if (vargs.USE_CWT) {
+      await this.cwt.init(audioFile);
+      await this.cwt.render();
+      return;
+    }
+
     this.stream = audioStream;
     this.source = this.audioCtx.createMediaStreamSource(this.stream);
     this.source.connect(this.analyser);
