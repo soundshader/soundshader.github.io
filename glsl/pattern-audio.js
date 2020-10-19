@@ -7,7 +7,7 @@ import { GpuMultiPassProgram } from "../webgl/multipass-program.js";
 // too many shader calls either, so there's an
 // optimal number of texture lookups per call,
 // which is usually around 4-6.
-const SAMPLES = 6; // must be a divisor of 12
+const SAMPLES = 12; // must be a divisor of 12
 const BASE_FREQ = 440; // the A4 note
 // These 7 octaves from 55 Hz to 7 kHz usually
 // contain all the audible sound. Music usually
@@ -38,7 +38,7 @@ export class GpuPatternAudioProgram extends GpuMultiPassProgram {
 
         float vol_sdb(float vol) {
           if (vol <= 0.0) return 0.0;
-          return (log(vol) + 8.203) / 9.032;
+          return max(0.0, (log(vol) + 8.203) / 9.032);
         }  
 
         float freqShape(float freq, float phase) {
