@@ -39,15 +39,17 @@ export class AudioController {
         canvas: this.canvas,
         stats: this.stats,
       });
+    } else {
+      this.initGpu();
     }
 
-    this.fft = new FFT(fftSize);
+    this.fft = new FFT(fftSize, {
+      webgl: vargs.FFT_GL && this.webgl,
+    });
+
     this.waveform = new Float32Array(fftSize);
     this.fftInput = new Float32Array(fftSize * 2);
     this.fftOutput = new Float32Array(fftSize * 2);
-
-    if (!vargs.USE_CWT)
-      this.initGpu();
 
     this.initMouse();
   }

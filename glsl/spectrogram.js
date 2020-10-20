@@ -7,24 +7,13 @@ export class GpuSpectrogramProgram {
     this.webgl = webgl;
     this.buffer1 = new GpuFrameBuffer(webgl, { size, channels: 2 });
     this.buffer2 = new GpuFrameBuffer(webgl, { size, channels: 2 });
-    /* this.buffer3 = new GpuFrameBuffer(webgl, { size, channels: 2 });
-    this.buffer4 = new GpuFrameBuffer(webgl, { size, channels: 2 }); */
     this.recorder = new GpuRecorder(webgl, { size });
-    this.accumulator = new GpuAccumulator(webgl, { size });
     this.colorizer = new GpuColorizer(webgl, { size, maxFreq });
   }
 
   exec({ uFFT, uTime, uMaxTime, uMousePos }, output) {
     [this.buffer1, this.buffer2] =
       [this.buffer2, this.buffer1];
-
-    /* [this.buffer3, this.buffer4] =
-      [this.buffer4, this.buffer3];
-
-    this.accumulator.exec({
-      uPrev: this.buffer3,
-      uFFT,
-    }, this.buffer4); */
 
     this.recorder.exec({
       uInput: this.buffer1,
@@ -166,50 +155,6 @@ class GpuRecorder extends GpuTransformProgram {
           v_FragColor = vTex.x > 1.0 - 1.0 * dx ?
             texture(uFFT, vec2(0.5, vTex.y)) :
             texture(uInput, vTex + vec2(dx, 0.0));
-        }
-      `,
-    });
-  }
-}
-
-// Applies FFT to each horizontal (frequency) line.
-class GpuAccumulator extends GpuTransformProgram {
-  constructor(webgl, { size }) {
-    super(webgl, {
-      fshader: `
-        in vec2 vTex;
-
-        uniform sampler2D uPrev;
-        uniform sampler2D uFFT;
-
-        const float PI = ${Math.PI};
-        const float N = float(${size});
-
-        // u * exp(2*pi*i*t)
-        vec2 c2mul(vec2 u, float t) {
-          float phi = 2.0 * PI * t;
-          float c = cos(phi);
-          float s = sin(phi);
-          float re = u.x * c - u.y * s;
-          float im = u.x * s + u.y * c;
-          return vec2(re, im);
-        }
-
-        vec2 c2pol(vec2 ra) {
-          return ra.x * vec2(cos(ra.y), sin(ra.y));
-        }
-
-        vec2 c2dec(vec2 u) {
-          return vec2(length(u), atan(u.y, u.x));
-        }
-
-        void main() {
-          float w = round(vTex.x * N - 0.5); // 0..N-1
-          vec2 Xw = c2pol(texture(uPrev, vTex).xy);
-          vec2 x0 = c2pol(texture(uPrev, vec2(0.5 / N, vTex.y)).xy);
-          vec2 xN = c2pol(vec2(texture(uFFT, vec2(0.5, vTex.y)).xy));
-          vec2 Yw = c2mul(Xw - x0, w / N) + c2mul(xN, w / N - w);
-          v_FragColor = vec4(c2dec(Yw), 0.0, 0.0);
         }
       `,
     });

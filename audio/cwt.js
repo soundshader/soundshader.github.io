@@ -1,5 +1,6 @@
 import * as vargs from '../vargs.js';
 import { FFT } from "./fft.js";
+import { GpuContext } from '../webgl/gpu-context.js';
 
 // Fast wavelet transform.
 export class CWT {
@@ -23,9 +24,9 @@ export class CWT {
     this.m_periods = vargs.CWT_N;
 
     this.t_min = 0;
-    this.t_max = 2 ** 17;
+    this.t_max = 2 ** vargs.CWT_LEN | 0;
 
-    this.f_min = 55.0;
+    this.f_min = 110.0;
     this.f_max = this.audioCtx.sampleRate / 2; // 22.5 kHz
 
     this.rendering = false;
@@ -84,6 +85,8 @@ export class CWT {
     let x1, x2, y1, y2;
 
     canvas.addEventListener('mousedown', e => {
+      if (selecting)
+        document.body.removeChild(area);
       selecting = true;
       x1 = e.offsetX;
       y1 = e.offsetY;
@@ -158,8 +161,8 @@ export class CWT {
     ];
 
     [this.f_min, this.f_max] = [
-      mix(this.f_min, this.f_max, 1 - y2),
-      mix(this.f_min, this.f_max, 1 - y1),
+      log2mix(this.f_min, this.f_max, 1 - y2),
+      log2mix(this.f_min, this.f_max, 1 - y1),
     ];
 
     // The Morlet wavelet exp(iwt)*exp(-w**2/2) extends
@@ -203,9 +206,14 @@ export class CWT {
     return this.audioCtx.sampleRate / freq;
   }
 
+  y2freq(y) {
+    let size = this.canvas.width;
+    return log2mix(this.f_min, this.f_max, 1 - y / size);
+  }
+
   drawLine(y = 0) {
     let size = this.canvas.width;
-    let freq = mix(this.f_min, this.f_max, 1 - y / size);
+    let freq = this.y2freq(y);
     let period = this.getPeriodSize(freq);
     let conv = this.convolve(period);
 
@@ -237,6 +245,7 @@ export class CWT {
 
   convolve(period = 2, res = this.conv_abs) {
     this.initMorletWavelet(period);
+    this.initFFT(this.fft_product.length / 2);
 
     // Convolution between signal and wavelet can be computed
     // in N*log(N) steps using the following relation:
@@ -246,8 +255,21 @@ export class CWT {
     // Where ** is convolution and * is the dot product.    
     // console.log('Computing FFT of input signal and wavelet function');
     FFT.dot(this.signal_fft, this.wavelet_fft, this.fft_product);
-    FFT.inverse(this.fft_product, this.convolution);
+    this.fft.inverse(this.fft_product, this.convolution);
     return FFT.abs(this.convolution, res);
+  }
+
+  initFFT(size) {
+    if (vargs.CWT_GL && !this.webgl) {
+      let glcanvas = document.createElement('canvas');
+      this.webgl = new GpuContext(glcanvas);
+      this.webgl.init();
+    }
+
+    if (!this.fft || this.fft.size != size) {
+      console.log('Re-initiailzing FFT:', size);
+      this.fft = new FFT(size, { webgl: this.webgl });
+    }
   }
 
   initAudioFrame() {
@@ -270,8 +292,10 @@ export class CWT {
 
     console.log('Running FFT over', signal.length, 'audio samples =',
       (signal.length / this.audioCtx.sampleRate).toFixed(2), 'sec of audio');
+    this.initFFT(signal.length);
     let time = Date.now();
-    this.signal_fft = FFT.forward(FFT.expand(signal));
+    this.signal_fft = new Float32Array(signal.length * 2);
+    this.fft.transform(FFT.expand(signal), this.signal_fft);
     console.log('FFT done in', Date.now() - time, 'ms');
 
     let n = this.signal_fft.length;

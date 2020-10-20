@@ -52,6 +52,9 @@ export class GpuTransformProgram {
         case gl.INT:
           gl.uniform1i(uptr, arg);
           break;
+        case gl.UNSIGNED_INT:
+          gl.uniform1ui(uptr, arg);
+          break;
         case gl.FLOAT:
           gl.uniform1f(uptr, arg);
           break;

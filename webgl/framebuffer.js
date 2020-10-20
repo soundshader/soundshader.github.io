@@ -25,6 +25,7 @@ export class GpuFrameBuffer {
     this.gl = glctx.gl;
     this.width = args.width;
     this.height = args.height;
+    this.channels = channels;
     this.texture = args.texture;
     this.fbo = args.fbo;
     this.fmt = args.fmt;
@@ -32,6 +33,33 @@ export class GpuFrameBuffer {
     this.source = source;
 
     this.clear();
+  }
+
+  // Moves data from GPU to CPU.
+  download(output = new Float32Array(this.width * this.height * this.channels),
+    x = 0, y = 0, width = this.width, height = this.height) {
+
+    if (output.length != width * height * this.channels)
+      throw new Error('Invalid CPU buffer length: ' + output.length);
+
+    let gl = this.gl;
+
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.fbo);
+    gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D, this.texture, 0);
+
+    this.tempbuf = this.tempbuf ||
+      new Float32Array(this.width * this.height * 4);
+
+    gl.readPixels(x, y, width, height,
+      gl.RGBA /* this.fmt.format */, this.type, this.tempbuf);
+
+    // This is ugly. readPixels() should really work with gl.RG.
+    for (let i = 0; i < width * height; i++)
+      for (let j = 0; j < this.channels; j++)
+        output[i * this.channels + j] = this.tempbuf[i * 4 + j];
+
+    return output;
   }
 
   clear() {
