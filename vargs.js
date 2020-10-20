@@ -1,8 +1,9 @@
 let args = new URLSearchParams(location.search);
 
-export const SIZE = +args.get('n') || 512;
+export const SIZE = +args.get('n') || 1024;
 export const USE_CWT = args.get('s') == 'cwt';
 export const USE_FFT = args.get('s') == 'fft';
+export const USE_ACF = args.get('s') == 'acf';
 
 export const CWT_BRIGHTNESS = +args.get('cwt.b') || 1;
 export const CWT_LEN = +args.get('cwt.len') || 17;

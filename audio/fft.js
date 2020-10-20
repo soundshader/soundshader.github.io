@@ -71,6 +71,20 @@ export class FFT {
     return res;
   }
 
+  static sqr_abs(src, res) {
+    res = FFT.abs(src);
+    for (let i = 0; i < res.length; i++)
+      res[i] *= res[i];
+    return res;
+  }
+
+  // https://en.wikipedia.org/wiki/Autocorrelation
+  static auto_cf(src, res) {
+    res = FFT.forward(src, res);
+    let sqr = FFT.sqr_abs(res);
+    return FFT.inverse(FFT.expand(sqr), res);
+  }
+
   static dot(src1, src2, res = src1.slice(0)) {
     let n = res.length / 2;
 

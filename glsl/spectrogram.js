@@ -3,12 +3,12 @@ import { shaderUtils } from "./basics.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 
 export class GpuSpectrogramProgram {
-  constructor(webgl, { size, maxFreq }) {
+  constructor(webgl, { size, maxFreq, logScale = true, radialCoords = false }) {
     this.webgl = webgl;
     this.buffer1 = new GpuFrameBuffer(webgl, { size, channels: 2 });
     this.buffer2 = new GpuFrameBuffer(webgl, { size, channels: 2 });
     this.recorder = new GpuRecorder(webgl, { size });
-    this.colorizer = new GpuColorizer(webgl, { size, maxFreq });
+    this.colorizer = new GpuColorizer(webgl, { size, maxFreq, logScale, radialCoords });
   }
 
   exec({ uFFT, uTime, uMaxTime, uMousePos }, output) {
@@ -31,10 +31,11 @@ export class GpuSpectrogramProgram {
 }
 
 class GpuColorizer extends GpuTransformProgram {
-  constructor(webgl, { size, maxFreq }) {
+  constructor(webgl, { size, maxFreq, logScale, radialCoords }) {
     super(webgl, {
       fshader: `
         in vec2 vTex;
+        in vec2 v;
 
         uniform sampler2D uInput;
         uniform vec2 uMousePos;
@@ -49,15 +50,17 @@ class GpuColorizer extends GpuTransformProgram {
         const float MAX_FREQ = float(${maxFreq});
         const float W_MIN = log2(MIN_AUDIBLE_FREQ / MAX_FREQ);
         const float W_MAX = log2(MAX_FREQ / MAX_FREQ);
+        const bool LOG_SCALE = ${!!logScale};
+        const bool RADIAL = ${!!radialCoords};
 
         ${shaderUtils}
 
         float y_to_w(float y) {
-          return pow(2.0, mix(W_MIN, W_MAX, y));
+          return !LOG_SCALE ? y : pow(2.0, mix(W_MIN, W_MAX, y));
         }
 
         float w_to_y(float w) {
-          return (log2(w) - W_MIN) / (W_MAX - W_MIN);
+          return !LOG_SCALE ? w : (log2(w) - W_MIN) / (W_MAX - W_MIN);
         }
 
         vec3 getFreqLine(float y) {
@@ -110,25 +113,34 @@ class GpuColorizer extends GpuTransformProgram {
           return vec3(hue, 1.0, vol);
         }
 
-        vec3 getVolumeColor(float vol, float arg) {
+        vec3 getVolumeColor(float vol) {
           if (vol == 0.0) return vec3(0.0);
           float sdb = (log(vol) + 8.203) / 9.032;
           float hue = (1.0 - clamp(sdb, 0.0, 1.0)) * 5.0/6.0;
+          if (RADIAL) hue = sdb * 2.0;
           return vec3(hue, 1.0, clamp(sdb, 0.0, 1.0));
         }        
 
         void main () {
           float freq = clamp(y_to_w(vTex.y), 0.0, 1.0);
+          vec2 ptr = vec2(vTex.x, freq);
 
-          vec2 pix = texture(uInput, vec2(vTex.x, freq)).xy;
-          float vol = pix.x;
-          float arg = pix.y;
+          if (RADIAL) {
+            float d = length(v);
+            float r = d * 0.25;
+            float a = atan(v.y, v.x) / PI * 0.5 - 0.25;
+            ptr = vec2(1.0 - r, a);
+          }
 
-          vec3 hsv = false ?
-            getPhaseColor(vol, arg) :
-            getVolumeColor(vol, arg);
+          vec2 tex = texture(uInput, ptr).xy;
+          float volume = tex.x;
+          float phase = tex.y;
+          vec3 hsv = getVolumeColor(volume);
 
-          hsv = add_rulers(hsv);
+          if (!RADIAL)
+            hsv = add_rulers(hsv);
+          else
+            hsv.z *= exp(-3.0*dot(v, v));
 
           vec3 rgb = hsv2rgb(hsv);
           v_FragColor = vec4(rgb, 1.0);

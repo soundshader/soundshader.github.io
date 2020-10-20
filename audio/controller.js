@@ -10,6 +10,7 @@ import { GpuRadialHarmonicsProgram } from "../glsl/radial-harmonics.js";
 import { GpuHarmonicsProgram } from "../glsl/harmonics.js";
 import { GpuZTransformProgram } from "../glsl/ztransform.js";
 import { GpuPolarHarmonicsProgram } from "../glsl/polar-harmonics.js";
+import { GpuAcfPolarProgram } from '../glsl/acf-polar.js';
 
 // Uses WebAudio's getFloatTimeDomainData() to read the raw audio samples
 // and then applies FFT to compute amplitudes and phases (important!).
@@ -93,6 +94,11 @@ export class AudioController {
         new GpuSpectrogramProgram(this.webgl, args));
     }
 
+    if (vargs.USE_ACF) {
+      this.renderers.push(
+        new GpuAcfPolarProgram(this.webgl, args));
+    }
+
     this.renderers.push(
       new GpuPatternAudioProgram(this.webgl, args),
       new GpuPolarHarmonicsProgram(this.webgl, args),
@@ -114,6 +120,7 @@ export class AudioController {
     node.exec({
       uTime: time,
       uMousePos: [this.mouseX, this.mouseY],
+      uWaveForm: this.fftInput,
       uFFT: this.fftFrameBuffer,
       uMaxTime: this.maxTime / 60, // audio captured at 60 fps
       uMaxFreq: this.maxFreq,
@@ -191,12 +198,9 @@ export class AudioController {
     this.waveform.fill(0);
     this.analyser.getFloatTimeDomainData(this.waveform);
 
-    this.fftInput.fill(0);
-    for (let i = 0; i < n; i++)
-      this.fftInput[i * 2] = this.waveform[i];
-
-    this.fftOutput.fill(0);
-    this.fft.transform(this.fftInput, this.fftOutput);
+    FFT.expand(this.waveform, this.fftInput);
+    if (vargs.USE_ACF) return;
+    FFT.forward(this.fftInput, this.fftOutput);
 
     for (let i = 0; i < n / 2; i++) {
       let re = this.fftOutput[i * 2];
