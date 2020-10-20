@@ -137,6 +137,16 @@ export class CWT {
           this.t_max -= size;
           this.render();
           break;
+        case 'ArrowUp':
+          this.m_periods *= 1.1;
+          console.log('m = ' + this.m_periods);
+          this.render();
+          break;
+        case 'ArrowDown':
+          this.m_periods /= 1.1;
+          console.log('m = ' + this.m_periods);
+          this.render();
+          break;
         default:
           console.log('Unhandled key:', e.key);
       }
@@ -165,13 +175,6 @@ export class CWT {
       log2mix(this.f_min, this.f_max, 1 - y1),
     ];
 
-    // The Morlet wavelet exp(iwt)*exp(-w**2/2) extends
-    // for N periods left and right. Beyond that point,
-    // the abs value of the wavelet function is below 0.03%
-    // (the 3 sigma range).
-    this.m_periods *= dx;
-    console.log('m = ' + this.m_periods);
-
     await this.render();
   }
 
@@ -188,7 +191,7 @@ export class CWT {
       this.drawLine(y + ymin);
       y = (22695477 * y + 1) % n; // LCG to pick y randomly
 
-      if (Date.now() > time + 250) {
+      if (Date.now() > time + 500) {
         this.context2d.putImageData(image, 0, 0);
         // yield to keyboard input, etc.
         await sleep(0);
@@ -229,16 +232,15 @@ export class CWT {
     pixels.fill(0);
 
     for (let i = 0; i < view.length; i++)
-      pixels[i / psize | 0] += view[i] / psize;
+      pixels[i / psize | 0] += view[i] ** 2 / psize;
 
     for (let x = 0; x < size; x++) {
       let avg = pixels[x];
-      let log = avg <= 0 ? 0 : avg >= 1 ? 1 : -1 / Math.log2(avg);
-      let sdb = (Math.log2(avg) + 8.203) / 9.032;
+      let log = -vargs.CWT_BRIGHTNESS / Math.log2(Math.min(0.95, avg));
       let p = 4 * (y * size + x);
-      image.data[p + 0] = sdb * 256 | 0;
-      image.data[p + 1] = log * 256 | 0;
-      image.data[p + 2] = 0;
+      image.data[p + 0] = log * 1 * 256;
+      image.data[p + 1] = log * 2 * 256;
+      image.data[p + 2] = log * 4 * 256;
       image.data[p + 3] = 255;
     }
   }
