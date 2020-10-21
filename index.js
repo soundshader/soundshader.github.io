@@ -34,8 +34,8 @@ function setMouseHandlers() {
   };
 
   canvas.onclick = async e => {
-    let x = e.clientX / canvas.clientWidth - 0.5;
-    let y = 0.5 - e.clientY / canvas.clientHeight;
+    let x = e.offsetX / canvas.clientWidth - 0.5;
+    let y = 0.5 - e.offsetY / canvas.clientHeight;
     console.log('canvas click:', x.toFixed(3), y.toFixed(3));
 
     let controller = getAudioController();

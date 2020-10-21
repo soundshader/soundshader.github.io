@@ -10,7 +10,8 @@ import { GpuRadialHarmonicsProgram } from "../glsl/radial-harmonics.js";
 import { GpuHarmonicsProgram } from "../glsl/harmonics.js";
 import { GpuZTransformProgram } from "../glsl/ztransform.js";
 import { GpuPolarHarmonicsProgram } from "../glsl/polar-harmonics.js";
-import { GpuAcfPolarProgram } from '../glsl/acf-polar.js';
+import { GpuAcfVisualizerProgram } from '../glsl/acf-visualizer.js';
+import { GpuWaveformProgram as GpuAcfAnalyzerProgram } from '../glsl/acf-analyzer.js';
 
 // Uses WebAudio's getFloatTimeDomainData() to read the raw audio samples
 // and then applies FFT to compute amplitudes and phases (important!).
@@ -59,9 +60,11 @@ export class AudioController {
     this.mouseX = 0;
     this.mouseY = 0;
 
+    if (!vargs.USE_MOUSE) return;
+
     this.canvas.onmousemove = e => {
-      let x = e.clientX / this.canvas.clientWidth;
-      let y = e.clientY / this.canvas.clientHeight;
+      let x = e.offsetX / this.canvas.clientWidth;
+      let y = e.offsetY / this.canvas.clientHeight;
 
       this.mouseX = x * 2 - 1;
       this.mouseY = 1 - y * 2;
@@ -84,6 +87,7 @@ export class AudioController {
     let args = {
       size: this.fftHalfSize,
       maxFreq: this.maxFreq,
+      logScale: vargs.FFT_LOG_SCALE,
     };
 
     this.rendererId = 0;
@@ -96,10 +100,11 @@ export class AudioController {
 
     if (vargs.USE_ACF) {
       this.renderers.push(
-        new GpuAcfPolarProgram(this.webgl, args));
+        new GpuAcfVisualizerProgram(this.webgl, args));
     }
 
     this.renderers.push(
+      new GpuAcfAnalyzerProgram(this.webgl, args),
       new GpuPatternAudioProgram(this.webgl, args),
       new GpuPolarHarmonicsProgram(this.webgl, args),
       new GpuZTransformProgram(this.webgl, args),

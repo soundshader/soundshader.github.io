@@ -3,12 +3,12 @@ import { shaderUtils } from "./basics.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 
 export class GpuSpectrogramProgram {
-  constructor(webgl, { size, maxFreq, logScale = true, radialCoords = false }) {
+  constructor(webgl, { size, maxFreq, logScale = true }) {
     this.webgl = webgl;
     this.buffer1 = new GpuFrameBuffer(webgl, { size, channels: 2 });
     this.buffer2 = new GpuFrameBuffer(webgl, { size, channels: 2 });
     this.recorder = new GpuRecorder(webgl, { size });
-    this.colorizer = new GpuColorizer(webgl, { size, maxFreq, logScale, radialCoords });
+    this.colorizer = new GpuColorizer(webgl, { size, maxFreq, logScale });
   }
 
   exec({ uFFT, uTime, uMaxTime, uMousePos }, output) {
@@ -31,7 +31,7 @@ export class GpuSpectrogramProgram {
 }
 
 class GpuColorizer extends GpuTransformProgram {
-  constructor(webgl, { size, maxFreq, logScale, radialCoords }) {
+  constructor(webgl, { size, maxFreq, logScale }) {
     super(webgl, {
       fshader: `
         in vec2 vTex;
@@ -51,7 +51,6 @@ class GpuColorizer extends GpuTransformProgram {
         const float W_MIN = log2(MIN_AUDIBLE_FREQ / MAX_FREQ);
         const float W_MAX = log2(MAX_FREQ / MAX_FREQ);
         const bool LOG_SCALE = ${!!logScale};
-        const bool RADIAL = ${!!radialCoords};
 
         ${shaderUtils}
 
@@ -117,30 +116,17 @@ class GpuColorizer extends GpuTransformProgram {
           if (vol == 0.0) return vec3(0.0);
           float sdb = (log(vol) + 8.203) / 9.032;
           float hue = (1.0 - clamp(sdb, 0.0, 1.0)) * 5.0/6.0;
-          if (RADIAL) hue = sdb * 2.0;
           return vec3(hue, 1.0, clamp(sdb, 0.0, 1.0));
         }        
 
         void main () {
           float freq = clamp(y_to_w(vTex.y), 0.0, 1.0);
           vec2 ptr = vec2(vTex.x, freq);
-
-          if (RADIAL) {
-            float d = length(v);
-            float r = d * 0.25;
-            float a = atan(v.y, v.x) / PI * 0.5 - 0.25;
-            ptr = vec2(1.0 - r, a);
-          }
-
           vec2 tex = texture(uInput, ptr).xy;
           float volume = tex.x;
           float phase = tex.y;
           vec3 hsv = getVolumeColor(volume);
-
-          if (!RADIAL)
-            hsv = add_rulers(hsv);
-          else
-            hsv.z *= exp(-3.0*dot(v, v));
+          hsv = add_rulers(hsv);
 
           vec3 rgb = hsv2rgb(hsv);
           v_FragColor = vec4(rgb, 1.0);

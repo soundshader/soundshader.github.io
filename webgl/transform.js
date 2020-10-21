@@ -47,6 +47,7 @@ export class GpuTransformProgram {
 
       switch (u.type) {
         case gl.SAMPLER_2D:
+          if (!arg) throw new Error('Missing sampler2D: ' + u.name);
           gl.uniform1i(uptr, arg.attach(nSamplers++));
           break;
         case gl.INT:

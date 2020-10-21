@@ -78,6 +78,19 @@ export class FFT {
     return res;
   }
 
+  static sqr_abs_reim(src, res = src.slice(0)) {
+    let n = src.length / 2;
+
+    for (let i = 0; i < n; i++) {
+      let re = src[2 * i];
+      let im = src[2 * i + 1];
+      res[2 * i] = re * re + im * im;
+      res[2 * i + 1] = 0;
+    }
+
+    return res;
+  }
+
   // https://en.wikipedia.org/wiki/Autocorrelation
   static auto_cf(src, res) {
     res = FFT.forward(src, res);
