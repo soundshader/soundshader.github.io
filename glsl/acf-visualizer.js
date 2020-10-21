@@ -61,7 +61,7 @@ class GpuColorizer extends GpuTransformProgram {
 
         const float N = float(${size});
         const float PI = ${Math.PI};
-        const float SPEED = 0.2;
+        const float SPEED = 0.1;
 
         ${shaderUtils}
 
@@ -87,9 +87,14 @@ class GpuColorizer extends GpuTransformProgram {
           float h = h_acf(a);
           float dh = dh_acf(a);
 
-          float val = tanh(abs(h) * 20.0 * exp(m.y * 10.0));
-          float hue = 1.0 - tanh(abs(dh) * 0.06 * exp(m.x * 10.0));
+          float h_tanh = tanh(h * 20.0 * exp(m.y * 10.0));
+          float dh_tanh = tanh(dh * 0.06 * exp(m.x * 10.0));
+
+          float hue = 0.7 * (h_tanh * 0.5 + 0.5);
+          float val = 1.0 - abs(dh_tanh);
           float sat = 1.0;
+
+          val *= abs(h_tanh);
 
           vec3 hsv = vec3(hue, sat, val);
           vec3 rgb = hsv2rgb(hsv) * exp(-3.5 * dot(v, v));
