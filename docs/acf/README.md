@@ -20,9 +20,13 @@ Now a few soundtracks from Quake 2:
 
 ![](../../pics/acf-8.png)
 
-And some club music:
+Some club music:
 
 ![](../../pics/acf-9.png)
+
+And a remarkable example (also David Parsons):
+
+![](../../pics/bowl-1.png)
 
 Just by looking at these images we can make a good guess how the musical pieces behind them sound.
 
@@ -106,7 +110,7 @@ How would you extract periodic patterns from a short 20 ms sample of sound and a
 
 # Questions?
 
-Just open an issue in [github.com/soundshader](https://github.com/soundshader/soundshader.github.io).
+Feel free to ask questions in [github.com/soundshader](https://github.com/soundshader/soundshader.github.io) or shoot me a email at [ssgh+glsl@aikh.org](mailto:ssgh@aikh.org).
 
 # License
 
