@@ -84,6 +84,16 @@ Finally, all the sound samples are assembled together:
 
 ![](../../pics/acf-11.png)
 
+# Visualizing the FFT phase
+
+ACF drops the phase component. However the phase can be extracted from the first FFT and mixed with the ACF shape. On the examples below, the radial coordinate is the ACF value, while color is the FFT phase. The first image is a 20 ms sample of conventional music, while the next two images are bird songs. The phase appears mostly continuous, with sudden jumps in certain places. The discontinuities might be caused by rounding errors in the FFT algorithm, but I haven't looked into this deeper.
+
+![](../../pics/phase-1.png)
+
+![](../../pics/phase-2.png)
+
+![](../../pics/phase-3.png)
+
 # How I came up with this idea
 
 I've reverse-engineered those "mandala" images, essentially. I've been looking at them and thinking that their symmetric structure is somehow related to symmetry in proper sound.

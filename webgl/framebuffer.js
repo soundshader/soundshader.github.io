@@ -35,7 +35,8 @@ export class GpuFrameBuffer {
     this.clear();
   }
 
-  // Moves data from GPU to CPU.
+  // Moves data from GPU to CPU. Beware that doing this at 60 fps,
+  // even if the texture is 1x1, kills the performance entirely.
   download(output = new Float32Array(this.width * this.height * this.channels),
     x = 0, y = 0, width = this.width, height = this.height) {
 

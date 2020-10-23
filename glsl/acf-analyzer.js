@@ -10,7 +10,8 @@ export class GpuWaveformProgram extends GpuTransformProgram {
         in vec2 v;
         in vec2 vTex;
 
-        uniform sampler2D uACF;
+        uniform sampler2D uACF; // (re, im)
+        uniform sampler2D uFFT; // (re, im)
         uniform vec2 uMousePos;
 
         const float PI = ${Math.PI};
@@ -18,33 +19,57 @@ export class GpuWaveformProgram extends GpuTransformProgram {
 
         ${shaderUtils}
 
-        // maps ACF from -inf..inf to -1..1
-        // phi = 0..1, no need to do mod()
-        float h_acf(float phi) {
-          vec2 m = uMousePos;
-          float acf = texture(uACF, vec2(0.5, phi)).x;
-          return tanh(acf * exp(m.y * 9.0));
+        vec4 textureSmooth(sampler2D tex, float y) {
+          float ds = fract(y*N + 0.5)/N; // y=0..1
+          return mix(
+            texture(tex, vec2(0.5, y - ds)),
+            texture(tex, vec2(0.5, y - ds + 1.0/N)),
+            1.0 - ds);
         }
 
-        // 1st derivative: (d/dphi h_acf)(phi)
-        float dh_acf(float phi) {
-          float h1 = h_acf(phi - 1.0 / N);
-          float h2 = h_acf(phi + 1.0 / N);
-          return (h2 - h1) * N * 0.5;
+        float h_acf(float a) {
+          return textureSmooth(uACF, a).x;
+        }
+
+        float fft_energy(float a) {
+          vec2 fft = textureSmooth(uFFT, a).xy;
+          return dot(fft, fft);
+        }
+
+        float fft_phase(float a) {
+          vec2 fft = textureSmooth(uFFT, a).xy;
+          return atan2(fft.y, fft.x);
+        }
+
+        vec3 rgb_color(vec2 v) {
+          float r = length(v);
+          float a = atan(v.y, v.x) / PI * 0.5 + 0.25;
+          float h = h_acf(a) / h_acf(0.0) * 0.5 + 0.5;
+
+          float val = r > h ? 0.0 : 0.5 * exp(-50.0 * pow(r - h, 2.0));
+          float hue = fft_phase(a) / PI * 0.5;
+          float sat = 1.0;
+          
+          vec3 hsv = vec3(hue, sat, val);
+          return hsv2rgb(hsv);
+        }
+
+        vec3 rgb_sampled(vec2 v, int samples) {
+          vec3 rgb = vec3(0.0);
+
+          for (int i = 0; i < samples; i++) {
+            vec2 dv = vec2(
+              rand(float(i + 1)*3.0) - 0.5,
+              rand(float(i + 1)*5.0) - 0.5);
+            rgb += rgb_color(v + dv/N);
+          }
+
+          return rgb / float(samples);
         }
 
         void main () {
-          vec2 m = uMousePos;
-
-          float r = length(v);
-          float a = atan(v.y, v.x) / PI * 0.5 - 0.25;
-
-          float acf = texture(uACF, vec2(0.5, a)).x;
-          float val = r < h_acf(a) * 0.5 + 0.5 ? 1.0 : 0.0;
-          float hue = 0.8 * tanh(exp(m.x * 5.0) / abs(dh_acf(a)));
-
-          vec3 hsv = vec3(hue, 1.0, val * 0.5);
-          vec3 rgb = hsv2rgb(hsv);
+          if (length(v) > 1.0) discard;
+          vec3 rgb = rgb_sampled(v, 2);
           v_FragColor = vec4(rgb, 1.0);
         }
       `,
@@ -54,19 +79,34 @@ export class GpuWaveformProgram extends GpuTransformProgram {
     // FFT = 2*size x (re, im)
     // ACF = 2*size x (re)
 
-    this.acfOutputReIm = new Float32Array(size * 4);
-    this.acfBufferData = new Float32Array(size * 2);
+    this.temp = new Float32Array(size * 4);
+    this.fftData = new Float32Array(size * 4);
+    this.acfData = new Float32Array(size * 4);
+
     this.acfBuffer = new GpuFrameBuffer(webgl, {
       width: 1,
       height: size * 2,
-      channels: 1,
-      source: this.acfBufferData,
-    });    
+      channels: 2, // (re, im)
+      source: this.acfData,
+    });
+
+    this.fftBuffer = new GpuFrameBuffer(webgl, {
+      width: 1,
+      height: size * 2,
+      channels: 2, // (re, im)
+      source: this.fftData,
+    });
   }
 
   exec(args, output) {
-    FFT.auto_cf(args.uWaveForm, this.acfOutputReIm);
-    FFT.re(this.acfOutputReIm, this.acfBufferData);
-    super.exec({ ...args, uACF: this.acfBuffer }, output);
+    FFT.forward(args.uWaveForm, this.fftData);
+    FFT.sqr_abs_reim(this.fftData, this.temp);
+    FFT.forward(this.temp, this.acfData);
+
+    super.exec({
+      ...args,
+      uFFT: this.fftBuffer,
+      uACF: this.acfBuffer,
+    }, output);
   }
 }

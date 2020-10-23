@@ -28,8 +28,13 @@ export const shaderUtils = `
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
   }
 
-  // Output: 0..1
+  // output: 0..1
   float rand(float seed) {
     return fract(sin((seed + 0.4627) * 12.9898) * 43758.5453);
+  }
+
+  float atan2(float y, float x) {
+    return abs(x) > abs(y) ?
+      atan(y, x) : ${Math.PI / 2} - atan(x, y);
   }
 `;

@@ -130,6 +130,19 @@ export class FFT {
     return res;
   }
 
+  static map(src, fn, res = src) {
+    let n = src.length / 2;
+
+    for (let i = 0; i < n; i++) {
+      let re = src[2 * i];
+      let im = src[2 * i + 1];
+      [re, im] = fn(re, im);
+      res[2 * i] = re;
+      res[2 * i + 1] = im;
+    }
+
+    return res;
+  }
 
   static normalize(res) {
     let n = res.length / 2;
