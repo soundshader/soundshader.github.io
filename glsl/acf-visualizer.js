@@ -1,7 +1,7 @@
 import { FFT } from "../audio/fft.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
-import { shaderUtils } from "./basics.js";
+import { shaderUtils, textureUtils } from "./basics.js";
 import { GpuStatsProgram } from "./stats.js";
 
 export class GpuAcfVisualizerProgram {
@@ -9,10 +9,18 @@ export class GpuAcfVisualizerProgram {
     this.webgl = webgl;
     this.image1 = new GpuFrameBuffer(webgl, { size: size * 2 });
     this.image2 = new GpuFrameBuffer(webgl, { size: size * 2 });
+
     this.recorder = new GpuRecorder(webgl, { size: size * 2 });
     this.heightMap = new GpuHeightMapProgram(webgl, { size });
-    this.heightMapStats = new GpuStatsProgram(webgl, { size });
+    this.gradMap = new GpuGradientProgram(webgl, { size });
+    this.stats = new GpuStatsProgram(webgl, { size });
     this.colorizer = new GpuColorizer(webgl);
+    this.mixer = new GpuMixer(webgl);
+
+    this.heightMapStats = new GpuFrameBuffer(webgl, { size, channels: 4 });
+    this.gradMapStats = new GpuFrameBuffer(webgl, { size, channels: 4 });
+    this.heightMapRGBA = new GpuFrameBuffer(webgl, { size, channels: 4 });
+    this.gradMapRGBA = new GpuFrameBuffer(webgl, { size, channels: 4 });
 
     // canvas = size x size
     // FFT = 2*size x (re, im)
@@ -32,24 +40,54 @@ export class GpuAcfVisualizerProgram {
     [this.image1, this.image2] =
       [this.image2, this.image1];
 
+    let [mx, my] = uMousePos;
+    let zoom = 1.0 + Math.exp(my * 5.0);
+    let balance = mx * 0.5 + 0.5;
+
     this.recorder.exec({
       uImage: this.image1,
       uSlice: this.acfBuffer,
     }, this.image2);
 
     this.heightMap.exec({
-      uMousePos,
+      uZoom: zoom,
       uACF: this.image2,
     });
 
-    this.heightMapStats.exec({
-      uData: this.heightMap.output,
-    });
+    if (balance > 0.01) {
+      this.stats.exec({
+        uData: this.heightMap.output,
+      }, this.heightMapStats);
 
-    this.colorizer.exec({
-      uMousePos,
-      uHeightMap: this.heightMap.output,
-      uHeightMapStats: this.heightMapStats.output,
+      this.colorizer.exec({
+        uColor: [1, 2, 4],
+        uAverage: 1,
+        uHeightMap: this.heightMap.output,
+        uHeightMapStats: this.heightMapStats,
+      }, this.heightMapRGBA);
+    }
+
+    if (balance < 0.99) {
+      this.gradMap.exec({
+        uACF: this.heightMap.output,
+      });
+
+      this.stats.exec({
+        uData: this.gradMap.output,
+      }, this.gradMapStats);
+
+      this.colorizer.exec({
+        uColor: [4, 2, 1],
+        uAverage: 0,
+        uHeightMap: this.gradMap.output,
+        uHeightMapStats: this.gradMapStats,
+      }, this.gradMapRGBA);
+    }
+
+    this.mixer.exec({
+      uBalance: balance,
+      uImage1: this.gradMapRGBA,
+      uImage2: this.heightMapRGBA,
     }, output);
   }
 }
@@ -128,31 +166,16 @@ class GpuHeightMapProgram extends GpuTransformProgram {
         in vec2 v;
 
         uniform sampler2D uACF;
-        uniform vec2 uMousePos;
+        uniform float uZoom;
 
         const float N = float(${size});
         const float PI = ${Math.PI};
 
-        vec4 textureSmooth(sampler2D tex, vec2 ptr) {
-          float dx = fract(ptr.x * N - 0.5);
-          float dy = fract(ptr.y * N - 0.5);
-          vec2 p1 = ptr - vec2(0.0 + dx, 0.0) / N;
-          vec2 p2 = ptr + vec2(1.0 - dx, 0.0) / N;
-          vec2 q1 = ptr - vec2(0.0, 0.0 + dy) / N;
-          vec2 q2 = ptr + vec2(0.0, 1.0 - dy) / N;
-          vec4 tp1 = texture(tex, p1);
-          vec4 tp2 = texture(tex, p2);
-          vec4 tq1 = texture(tex, q1);
-          vec4 tq2 = texture(tex, q2);
-          vec4 p = mix(tp1, tp2, 1.0 - dx);
-          vec4 q = mix(tq1, tq2, 1.0 - dy);
-          return mix(p, q, 0.5);
-        }
+        ${textureUtils}
 
         float h_acf(float a) {
-          float zoom = 1.0 + exp(uMousePos.y * 3.0);
           float r = length(v);
-          float t = 1.0 - r * 0.5 / zoom;
+          float t = 1.0 - r * 0.5 / uZoom;
           return textureSmooth(uACF, vec2(t, a)).x;
         }
 
@@ -166,16 +189,64 @@ class GpuHeightMapProgram extends GpuTransformProgram {
   }
 }
 
+class GpuGradientProgram extends GpuTransformProgram {
+  constructor(webgl, { size }) {
+    super(webgl, {
+      size,
+      fshader: `
+        in vec2 v;
+        in vec2 vTex;
+
+        uniform sampler2D uACF;
+
+        const float N = float(${size});
+        const vec2 DX = vec2(1.0/N, 0.0);
+        const vec2 DY = vec2(0.0, 1.0/N);
+
+        float fetch(vec2 vTex) {
+          return texture(uACF, vTex).x;
+        }
+
+        float grad(vec2 vTex) {
+          float h1 = fetch(vTex - DX);
+          float h2 = fetch(vTex + DX);
+          float h3 = fetch(vTex - DY);
+          float h4 = fetch(vTex + DY);
+
+          float d1 = fetch(vTex + DX - DY);
+          float d2 = fetch(vTex + DX + DY);
+          float d3 = fetch(vTex - DX + DY);
+          float d4 = fetch(vTex - DX - DY);
+
+          float gx1 = (h2 - h1) * 0.5;
+          float gy1 = (h4 - h3) * 0.5;
+          float gx2 = (d2 - d4) * 0.5 / sqrt(2.0);
+          float gy2 = (d1 - d3) * 0.5 / sqrt(2.0);
+
+          float g1 = sqrt(gx1*gx1 + gy1*gy1);
+          float g2 = sqrt(gx2*gx2 + gy2*gy2);
+
+          return (g1 + g2) * 0.5 * N;
+        }
+
+        void main () {
+          float g = grad(vTex);
+          v_FragColor = vec4(g);
+        }
+      `,
+    });
+  }
+}
+
 class GpuColorizer extends GpuTransformProgram {
   constructor(webgl) {
     super(webgl, {
       fshader: `
-        in vec2 vTex;
         in vec2 v;
+        in vec2 vTex;
 
-        const vec3 COLOR = vec3(1.0, 2.0, 4.0);
-
-        uniform vec2 uMousePos;
+        uniform vec3 uColor;
+        uniform float uAverage;
         uniform sampler2D uHeightMap;
         uniform sampler2D uHeightMapStats;
 
@@ -188,10 +259,9 @@ class GpuColorizer extends GpuTransformProgram {
           float h_avg = stats.z; // +/- 0.0
           float sigma = stats.w; // 0.3..0.5
 
-          vec3 rgb = COLOR * (abs(h - h_avg) / 3.0 / sigma);
-          rgb *= exp(-3.0 * dot(v, v));
-          rgb *= 1.0 - exp(-1e2 * dot(v, v));
-          v_FragColor = vec4(rgb, 1.0);
+          float val = abs(mix(h, h - h_avg, uAverage));
+          vec3 rgb = uColor * val / 3.0 / sigma;
+          v_FragColor = vec4(clamp(rgb, 0.0, 1.0), 1.0);
         }
       `,
     });
@@ -215,6 +285,27 @@ class GpuRecorder extends GpuTransformProgram {
           v_FragColor = vTex.x > 1.0 - 1.0 * dx ?
             texture(uSlice, vec2(0.5, vTex.y)) :
             texture(uImage, vTex + vec2(dx, 0.0));
+        }
+      `,
+    });
+  }
+}
+
+class GpuMixer extends GpuTransformProgram {
+  constructor(webgl) {
+    super(webgl, {
+      fshader: `
+        in vec2 v;
+        in vec2 vTex;
+
+        uniform sampler2D uImage1;
+        uniform sampler2D uImage2;
+        uniform float uBalance;
+
+        void main() {
+          vec4 tex1 = texture(uImage1, vTex);
+          vec4 tex2 = texture(uImage2, vTex);
+          v_FragColor = mix(tex1, tex2, uBalance);
         }
       `,
     });

@@ -149,7 +149,7 @@ export class AudioController {
 
   async stop() {
     if (!this.started) return;
-    this.audioEl.pause();
+    this.audioEl?.pause();
     this.source.disconnect();
     let tracks = this.stream.getTracks();
     tracks.map(t => t.stop());
@@ -190,7 +190,7 @@ export class AudioController {
     };
 
     this.running = true;
-    this.audioEl.play();
+    this.audioEl?.play();
     console.log('Audio resumed');
 
     animate();
@@ -198,7 +198,7 @@ export class AudioController {
 
   pause() {
     this.running = false;
-    this.audioEl.pause();
+    this.audioEl?.pause();
     console.log('Audio paused');
   }
 

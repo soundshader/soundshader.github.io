@@ -74,31 +74,32 @@ export class GpuFrameBuffer {
 
   attach(id) {
     let gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0 + id);
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    if (this.source)
+      this.upload(this.source);
+    return id;
+  }
+
+  upload(source) {
+    let gl = this.gl;
     let level = 0; // mipmap
     let border = 0;
     let offset = 0;
-
-    gl.activeTexture(gl.TEXTURE0 + id);
-    gl.bindTexture(gl.TEXTURE_2D, this.texture);
-
-    if (this.source) {
-      let type = this.type;
-      let fmt = this.fmt;
-      // gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
-      // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        level,
-        fmt.internalFormat,
-        this.width,
-        this.height,
-        border,
-        fmt.format,
-        type,
-        this.source,
-        offset);
-    }
-
-    return id;
+    let type = this.type;
+    let fmt = this.fmt;
+    // gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      level,
+      fmt.internalFormat,
+      this.width,
+      this.height,
+      border,
+      fmt.format,
+      type,
+      source,
+      offset);
   }
 }

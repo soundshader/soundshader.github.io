@@ -73,15 +73,14 @@ export class GpuStatsProgram extends GpuTransformProgram {
     this.output = this.mipmaps[0]; // 1x1x4
   }
 
-  exec({ uData }) {
+  exec({ uData }, output = this.output) {
     let a = this.mipmaps;
     let n = a.length + 1;
 
     for (let i = 0; i < n - 1; i++) {
-      super.exec({
-        uData: i == 0 ? uData :
-          a[n - i - 1],
-      }, a[n - i - 2]);
+      let src = i == 0 ? uData : a[n - i - 1];
+      let res = i == n - 2 ? output : a[n - i - 2];
+      super.exec({ uData: src }, res);
     }
   }
 }

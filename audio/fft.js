@@ -295,8 +295,9 @@ export class GpuFFT extends GpuTransformProgram {
       width,
       height,
       channels: 2,
-      source: new Float32Array(revidx2d),
     });
+
+    this.texRevIdx.upload(new Float32Array(revidx2d));
 
     this.init({
       fshader: `
