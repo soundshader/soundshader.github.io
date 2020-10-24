@@ -12,7 +12,7 @@ export class GpuAcfVisualizerProgram {
     this.recorder = new GpuRecorder(webgl, { size: size * 2 });
     this.heightMap = new GpuHeightMapProgram(webgl, { size });
     this.heightMapStats = new GpuStatsProgram(webgl, { size });
-    this.colorizer = new GpuColorizer(webgl, { size: size * 2 });
+    this.colorizer = new GpuColorizer(webgl);
 
     // canvas = size x size
     // FFT = 2*size x (re, im)
@@ -112,38 +112,20 @@ class GpuHeightMapProgram extends GpuTransformProgram {
 }
 
 class GpuColorizer extends GpuTransformProgram {
-  constructor(webgl, { size }) {
+  constructor(webgl) {
     super(webgl, {
       fshader: `
         in vec2 vTex;
         in vec2 v;
 
+        const vec3 COLOR = vec3(1.0, 2.0, 4.0);
+
         uniform vec2 uMousePos;
         uniform sampler2D uHeightMap;
         uniform sampler2D uHeightMapStats;
 
-        const float N = float(${size});
-        const float PI = ${Math.PI};
-        const vec3 COLOR = vec3(1.0, 2.0, 4.0);
-
-        ${shaderUtils}
-
-        float hmap(vec2 vTex) {
-          return texture(uHeightMap, vTex).x;
-        }
-
-        float grad(vec2 vTex) {
-          float ds = 1.0 / N;
-          float hx1 = hmap(vTex - vec2(ds, 0.0));
-          float hx2 = hmap(vTex + vec2(ds, 0.0));
-          float hy1 = hmap(vTex - vec2(0.0, ds));
-          float hy2 = hmap(vTex + vec2(0.0, ds));
-          float gx = hx2 - hx1;
-          float gy = hy2 - hy1;
-          return sqrt(gx*gx + gy*gy) * 0.5/ds;
-        }
-
         void main () {
+          float h = texture(uHeightMap, vTex).x;
           vec4 stats = texture(uHeightMapStats, vec2(0.0));
 
           float h_min = stats.x; // -5*sigma
@@ -151,17 +133,9 @@ class GpuColorizer extends GpuTransformProgram {
           float h_avg = stats.z; // +/- 0.0
           float sigma = stats.w; // 0.3..0.5
 
-          float h = hmap(vTex);
-          // float g = grad(vTex);
-
-          // float volume = 3.0 / (5.0 * sigma);
-          // float h_norm = tanh((h - h_avg) * volume);
-          // float g_norm = tanh(g * volume);
-
-          vec3 rgb = COLOR * (abs(h) / 3.0 / sigma);
+          vec3 rgb = COLOR * (abs(h - h_avg) / 3.0 / sigma);
           rgb *= exp(-3.0 * dot(v, v));
           rgb *= 1.0 - exp(-1e2 * dot(v, v));
-
           v_FragColor = vec4(rgb, 1.0);
         }
       `,

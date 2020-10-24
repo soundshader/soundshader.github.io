@@ -132,13 +132,14 @@ export class AudioController {
     }, null);
   }
 
-  async start(audioStream, audioFile) {
+  async start(audioStream, audioFile, audioEl) {
     if (vargs.USE_CWT) {
       await this.cwt.init(audioFile);
       await this.cwt.render();
       return;
     }
 
+    this.audioEl = audioEl;
     this.stream = audioStream;
     this.source = this.audioCtx.createMediaStreamSource(this.stream);
     this.source.connect(this.analyser);
@@ -148,6 +149,7 @@ export class AudioController {
 
   async stop() {
     if (!this.started) return;
+    this.audioEl.pause();
     this.source.disconnect();
     let tracks = this.stream.getTracks();
     tracks.map(t => t.stop());
@@ -188,12 +190,15 @@ export class AudioController {
     };
 
     this.running = true;
+    this.audioEl.play();
     console.log('Audio resumed');
+
     animate();
   }
 
   pause() {
     this.running = false;
+    this.audioEl.pause();
     console.log('Audio paused');
   }
 

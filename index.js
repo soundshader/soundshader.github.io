@@ -51,15 +51,14 @@ function setMouseHandlers() {
   };
 
   btnUpload.onclick = async () => {
-    let controller = getAudioController();
-    if (controller.started) return;
-
     let { audio, stream, file } = await selectAudioFile();
     if (!stream) return;
 
+    let controller = getAudioController();
+    controller.stop();
+
     audio.loop = true;
-    audio.play();
-    controller.start(stream, file);
+    controller.start(stream, file, audio);
   };
 }
 

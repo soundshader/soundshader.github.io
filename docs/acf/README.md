@@ -110,7 +110,7 @@ How would you extract periodic patterns from a short 20 ms sample of sound and a
 
 # Questions?
 
-Feel free to ask questions in [github.com/soundshader](https://github.com/soundshader/soundshader.github.io) or shoot me a email at [ssgh+glsl@aikh.org](mailto:ssgh@aikh.org).
+Feel free to ask questions in [github.com/soundshader](https://github.com/soundshader/soundshader.github.io) or shoot me a email at [ssgh@aikh.org](mailto:ssgh@aikh.org).
 
 # License
 
