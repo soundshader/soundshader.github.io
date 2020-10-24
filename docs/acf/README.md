@@ -100,13 +100,17 @@ ACF drops the phase component. However the phase can be extracted from the first
 
 # How I came up with this idea
 
-I've reverse-engineered those "mandala" images, essentially. I've been looking at them and thinking that their symmetric structure is somehow related to symmetry in proper sound.
+Music is a temporal ornament. There are many types of ornaments, e.g. the 17 types of wallpaper tesselations, but few of them look like music. However there is one particular type of ornament that resembles music a lot - those "mandala" images. I don't really know how and why those are produced, but I noticed a particular connection between those images and music.
 
 - The 1st obvious observation is that a mandala is drawn in polar coordinates and is `2*PI` periodic.
 - The 2nd observation is that the radial coordinate corresponds to time, while the angular coordinate corresponds to sound frequencies.
 - The 3rd observation is that if we take a tiny circular slice of a mandala `|r - r0| < eps`, and look at that circle as a `2*PI` periodic function of sound samples, we could trivially make it audible. The `2*PI` periodic structure will make the produced sound a combination of pure sinusoidal tones.
 
 How would you extract periodic patterns from a short 20 ms sample of sound and assemble them back into a `2*PI` periodic function? You'd take FFT of the 20 ms sample of sound, take magnitudes of the result, and combine the magnitudes back into a mix of sinusoidal waves with the inverse FFT. That's exactly what ACF is doing. And the nice property of FFT is that it can be computed in `N*log(N)` time.
+
+![](../../pics/bowl-2.png)
+
+Most people would probably recognize the image above as a "mandala", but it's really ACF of first 60 sec of one sonudtrack (David Parsons, "Himalaya").
 
 # Questions?
 

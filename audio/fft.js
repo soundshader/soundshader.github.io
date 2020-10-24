@@ -176,27 +176,12 @@ export class FFT {
       this.revidx[k] = r;
     }
 
-    if (webgl) this.initGPU();
-  }
-
-  initGPU() {
-    let webgl = this.webgl;
-    let nlog2 = Math.log2(this.size);
-    let width = 2 ** Math.ceil(nlog2 / 2);
-    let height = 2 ** Math.floor(nlog2 / 2);
-
-    // 1 million inputs -> 1024 x 1024 texture
-    this.shader = new GpuFFT(webgl, { width, height });
-    this.texData = new Float32Array(this.size * 2);
-    this.texture = new GpuFrameBuffer(webgl, {
-      width,
-      height,
-      channels: 2,
-      source: this.texData,
-    });
-
-    this.texture1 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
-    this.texture2 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
+    if (webgl) {
+      this.shader = new GpuFFT(webgl, {
+        size: this.size,
+        revidx: this.revidx,
+      });
+    }
   }
 
   bit_reverse(src, res) {
@@ -272,30 +257,48 @@ export class FFT {
 
   // Same as transform(), but on GPU.
   transform_gpu(src, res) {
-    let n = this.size;
-    this.bit_reverse(src, res);
-    this.texData.set(res);
-
-    let tex1 = this.texture1;
-    let tex2 = this.texture2;
-
-    for (let s = 2; s <= n; s *= 2) {
-      [tex1, tex2] = [tex2, tex1];
-      this.shader.exec({
-        uScale: s,
-        uInput: s == 2 ? this.texture : tex1,
-      }, tex2);
+    if (res instanceof GpuFrameBuffer) {
+      this.shader.exec({ uInput: src }, res);
+    } else {
+      this.shader.exec({ uInput: src });
+      this.shader.output.download(res);
     }
-
-    tex2.download(res); // copy data from GPU's texture
-    FFT.normalize(res); // make the DFT unitary
   }
 }
 
-class GpuFFT extends GpuTransformProgram {
-  constructor(webgl, { width, height }) {
-    super(webgl, {
-      channels: 2, // [re, im]
+export class GpuFFT extends GpuTransformProgram {
+  constructor(webgl, { size, revidx }) {
+    super(webgl);
+
+    // FFT size = width * height, i.e. FFT input
+    // with 1M (re, im) pairs is represented as a
+    // 1024 x 1024 texture with 2 channels.
+    let width = 2 ** Math.ceil(Math.log2(size) / 2);
+    let height = 2 ** Math.floor(Math.log2(size) / 2);
+
+    this.size = size;
+    this.width = width;
+    this.height = height;
+
+    this.texture1 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
+    this.texture2 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
+
+    let revidx2d = new Int32Array(size * 2);
+
+    for (let i = 0; i < size; i++) {
+      let s = revidx[i];
+      revidx2d[2 * i + 0] = s % width | 0;
+      revidx2d[2 * i + 1] = s / width | 0;
+    }
+
+    this.texRevIdx = new GpuFrameBuffer(webgl, {
+      width,
+      height,
+      channels: 2,
+      source: new Float32Array(revidx2d),
+    });
+
+    this.init({
       fshader: `
         in vec2 vTex;
 
@@ -344,37 +347,69 @@ class GpuFFT extends GpuTransformProgram {
         }
       `,
     });
+
+    this.reverser = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+
+        uniform sampler2D uInput;
+        uniform sampler2D uRevIdx;
+
+        void main() {
+          vec2 ptr = texture(uRevIdx, vTex).xy;
+          v_FragColor = texelFetch(uInput, ivec2(ptr), 0);
+        }
+      `,
+    });
+
+    // Same as FFT.normalize() - makes the DFT unitary.
+    this.normalizer = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+        uniform sampler2D uInput;
+        const float N_SQRT = float(${Math.sqrt(width * height)});
+        void main() {
+          // it's really a vec2 with (re, im)
+          vec4 fft = texture(uInput, vTex);
+          v_FragColor = fft / N_SQRT;
+        }
+      `,
+    });
+  }
+
+  exec({ uInput }, output) {
+    let n = this.size;
+
+    let tex1 = this.texture1;
+    let tex2 = this.texture2;
+
+    let tex = tex1;
+
+    if (uInput instanceof GpuFrameBuffer)
+      tex = uInput;
+    else if (uInput instanceof Float32Array)
+      tex.source = uInput;
+    else
+      throw new Error('Invalid FFT input: ' + uInput);
+
+    this.reverser.exec({
+      uInput: tex,
+      uRevIdx: this.texRevIdx,
+    }, tex2);
+
+    tex1.source = null;
+
+    for (let s = 2; s <= n; s *= 2) {
+      [tex1, tex2] =
+        [tex2, tex1];
+      super.exec({
+        uScale: s,
+        uInput: tex1,
+      }, tex2);
+    }
+
+    this.normalizer.exec({
+      uInput: tex2,
+    }, output || (this.output = tex1));
   }
 }
-
-/* for (let i = 0; i < n; i++) {
-  let j = i / s | 0;
-  let k = i % (s / 2);
-
-  // exp(2*pi*i/N)^k
-  let kth = n / s * k; // 0..n/2
-  let cos = this.uroots[kth * 2];
-  let sin = this.uroots[kth * 2 + 1];
-
-  let u = j * s + k;
-  let v = u + s / 2;
-
-  // E[k] - even
-  let u_re = res[u * 2];
-  let u_im = res[u * 2 + 1];
-
-  // O[k] - odd
-  let v_re = res[v * 2];
-  let v_im = res[v * 2 + 1];
-
-  // O[k] * exp(-2*pi*i/N)^k
-  let t_re = v_re * cos + v_im * sin;
-  let t_im = v_im * cos - v_re * sin;
-
-  // E[k] + O[k] * exp(...) = X[k]
-  // E[k] - O[k] * exp(...) = X[k + s/2]
-  let sign = i % s < s / 2 ? +1 : -1;
-
-  tmp[i * 2 + 0] = u_re + t_re * sign;
-  tmp[i * 2 + 1] = u_im + t_im * sign;
-} */

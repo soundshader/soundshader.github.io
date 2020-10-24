@@ -18,26 +18,16 @@ export class GpuAcfVisualizerProgram {
     // FFT = 2*size x (re, im)
     // ACF = 2*size x (re)
 
-    this.fftData = new Float32Array(size * 4);
-    this.acfData = new Float32Array(size * 4);
-    this.temp = new Float32Array(size * 4);
-    this.reData = new Float32Array(size * 2);
+    this.gpuACF = new GpuACF(webgl, { size: size * 2 });
 
     this.acfBuffer = new GpuFrameBuffer(webgl, {
       width: 1,
       height: size * 2,
-      source: this.reData,
     });
   }
 
   exec({ uWaveForm, uMousePos }, output) {
-    FFT.forward(uWaveForm, this.fftData);
-    FFT.sqr_abs_reim(this.fftData, this.temp);
-    // In general, ACF[X] needs to do inverseFFT[S]
-    // here, but since S is real and ACF[X] is also
-    // real, inverseFFT here is equivalent to FFT.
-    FFT.forward(this.temp, this.acfData);
-    FFT.re(this.acfData, this.reData);
+    this.gpuACF.exec({ uWaveForm }, this.acfBuffer);
 
     [this.image1, this.image2] =
       [this.image2, this.image1];
@@ -61,6 +51,71 @@ export class GpuAcfVisualizerProgram {
       uHeightMap: this.heightMap.output,
       uHeightMapStats: this.heightMapStats.output,
     }, output);
+  }
+}
+
+class GpuACF {
+  constructor(webgl, { size }) {
+    this.size = size;
+    this.fft = new FFT(size, { webgl });
+
+    let width = this.fft.shader.width;
+    let height = this.fft.shader.height;
+
+    this.temp = new Float32Array(size * 2);
+    this.temp1 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
+    this.temp2 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
+
+    this.sqrabs = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+        uniform sampler2D uInput;
+        void main() {
+          vec2 z = texture(uInput, vTex).xy;
+          v_FragColor = vec4(dot(z, z), 0.0, 0.0, 0.0);
+        }
+      `,
+    });
+
+    this.justre = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+        uniform sampler2D uInput;
+        void main() {
+          float re = texture(uInput, vTex).x;
+          v_FragColor = vec4(re, 0.0, 0.0, 0.0);
+        }
+      `,
+    });
+
+    this.reshape = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+
+        uniform sampler2D uInput;
+
+        void main() {
+          ivec2 size = textureSize(uInput, 0);
+          int i = int(vTex.y * float(size.x * size.y) - 0.5);
+          int x = i % size.x;
+          int y = i / size.x;
+          v_FragColor = texelFetch(uInput, ivec2(x, y), 0);
+        }
+      `,
+    });
+  }
+
+  exec({ uWaveForm }, uACF) {
+    if (uACF.width != 1 || uACF.height != this.size)
+      throw new Error('ACF output must be a 1xN buffer');
+    this.fft.transform(uWaveForm, this.temp2);
+    this.sqrabs.exec({ uInput: this.temp2 }, this.temp1);
+    // In general, ACF[X] needs to do inverseFFT[S]
+    // here, but since S is real and ACF[X] is also
+    // real, inverseFFT here is equivalent to FFT.
+    this.fft.transform(this.temp1, this.temp2);
+    this.justre.exec({ uInput: this.temp2 }, this.temp1);
+    this.reshape.exec({ uInput: this.temp1 }, uACF);
   }
 }
 

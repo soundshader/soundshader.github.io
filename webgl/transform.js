@@ -1,5 +1,6 @@
 import { GpuProgram } from "./gpu-program.js";
 import { vShaderCopy, fShaderCopy } from "../glsl/basics.js";
+import { GpuFrameBuffer } from "./framebuffer.js";
 
 // This is a "GPU transformer node" that takes a few inputs
 // and runs the fragment shader to produce one output buffer.
@@ -8,14 +9,23 @@ import { vShaderCopy, fShaderCopy } from "../glsl/basics.js";
 export class GpuTransformProgram {
   constructor(glctx, {
     size = 0, // When the output is the canvas, there is no output buffer.
+    width = 0,
+    height = 0,
     channels = 1,
-    vshader = vShaderCopy,
-    fshader = fShaderCopy,
-  }) {
+    vshader,
+    fshader,
+  } = {}) {
     this.glctx = glctx;
-    this.output = size > 0 && glctx.createFrameBuffer(size, channels);
-    this.vertexShader = glctx.createVertexShader(vshader);
-    this.fragmentShader = glctx.createFragmentShader(fshader);
+    width = width || size;
+    height = height || size;
+    this.output = width * height && new GpuFrameBuffer(glctx, { width, height, channels });
+    this.init({ vshader, fshader });
+  }
+
+  init({ vshader, fshader }) {
+    let glctx = this.glctx;
+    this.vertexShader = glctx.createVertexShader(vshader || vShaderCopy);
+    this.fragmentShader = glctx.createFragmentShader(fshader || fShaderCopy);
     this.program = glctx.createProgram(
       this.vertexShader,
       this.fragmentShader);
