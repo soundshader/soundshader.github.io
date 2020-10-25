@@ -64,7 +64,7 @@ export class GpuContext {
     console.log('Initializing WebGL');
 
     let params = {
-      alpha: false,
+      alpha: true,
       depth: false,
       stencil: false,
       antialias: false,

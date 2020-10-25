@@ -31,7 +31,7 @@ export class GpuAcfVisualizerProgram {
     this.heightMap = new GpuHeightMapProgram(webgl, { size });
     this.stats = new GpuStatsProgram(webgl, { size });
     this.downsampler = new GpuDownsampler(webgl, { size, aa });
-    this.colorizer = new GpuColorizer(webgl, { sigma: 2.5 });
+    this.colorizer = new GpuColorizer(webgl, { sigma: 3.0 });
 
     this.acfBuffer = new GpuFrameBuffer(webgl, { width: 1, height: waveformLen });
     this.acfBufferAA = new GpuFrameBuffer(webgl, { width: 1, height: size });
@@ -253,8 +253,8 @@ class GpuColorizer extends GpuTransformProgram {
         const float R_MAX = 0.75;
         const float R_GAIN = 1.5;
         const float N_SIGMA = float(${sigma});
-        const vec3 RGB_A = vec3(4.0, 2.0, 1.0);
-        const vec3 RGB_B = vec3(1.0, 2.0, 4.0);
+        const vec3 COLOR_1 = vec3(4.0, 2.0, 1.0);
+        const vec3 COLOR_2 = vec3(1.0, 2.0, 4.0);
 
         uniform vec3 uColor;
         uniform sampler2D uHeightMap;
@@ -273,6 +273,19 @@ class GpuColorizer extends GpuTransformProgram {
           return 0.5 + 0.5 * gain((r - r0) / r0, R_GAIN);
         }
 
+        vec3 hcolor(float h) {
+          float s = sign(h) * 0.5 + 0.5;
+          vec3 rgb = mix(COLOR_2, COLOR_1, s);
+          return clamp(abs(h) * rgb, 0.0, 1.0);
+        }
+
+        vec3 hcolor2(float h) {
+          vec3 c1 = 0.33 * hcolor(h);
+          vec3 c2 = 0.33 * hcolor(h * 1.4);
+          vec3 c3 = 0.33 * hcolor(h * 2.0);
+          return c1 + c2 + c3;
+        }
+
         vec4 rgba(vec2 vTex) {
           float r = length(v);
           if (r > 0.99) return vec4(0.0);
@@ -285,14 +298,11 @@ class GpuColorizer extends GpuTransformProgram {
           float h_avg = stats.z; // +/- 0.0
           float sigma = stats.w; // 0.3..0.5
 
-          float lum = abs(h) / (N_SIGMA * sigma);
-          
-          vec3 rgb = lum * mix(RGB_B, RGB_A, sign(h)*0.5 + 0.5);
-          rgb = clamp(rgb, 0.0, 1.0);
-
-          rgb *= fadeoff(r);
-          rgb *= fadein(r);
-          return vec4(rgb, 1.0);
+          vec3 rgb = hcolor2(h / N_SIGMA / sigma);
+          vec4 rgba = vec4(rgb, 1.0);
+          rgba *= fadeoff(r);
+          rgba *= fadein(r);
+          return rgba;
         }
 
         void main () {
