@@ -3,8 +3,11 @@ import { AudioController } from './audio/controller.js';
 
 let btnUpload = document.querySelector('#upload');
 let btnMic = document.querySelector('#mic');
+let btnRec = document.querySelector('#rec');
 let divStats = document.querySelector('#stats');
 let canvas = document.querySelector('canvas');
+let audio = document.querySelector('audio');
+let audioStream = null;
 let audioController = null; // use getAudioController()
 let keyboardHandlers = {};
 
@@ -20,17 +23,66 @@ function main() {
   canvas.height = vargs.IMAGE_SIZE;
   setKeyboardHandlers();
   setMouseHandlers();
+  setRecordingHandler();
   divStats.textContent = 'Select a mp3 file or use mic.';
+}
+
+function setRecordingHandler() {
+  let videoStream, recorder, chunks;
+
+  btnRec.onclick = async () => {
+    if (recorder) {
+      console.log('Saving recorded media');
+      videoStream.getTracks().map(t => t.stop());
+      videoStream = null;
+
+      recorder.onstop = () => {
+        let mime = recorder.mimeType;
+        let size = chunks.reduce((s, b) => s + b.size, 0);
+        console.log('Prepairing a media blob', mime, 'with',
+          chunks.length, 'chunks', size / 2 ** 10 | 0, 'KB total');
+        let blob = new Blob(chunks, { type: mime })
+        let url = URL.createObjectURL(blob);
+        chunks = [];
+        recorder = null;
+
+        console.log('Downloading the media blob at', url);
+        let a = document.createElement('a');
+        let filename = new Date().toJSON()
+          .replace(/\..+$/, '')
+          .replace(/[^\d]/g, '-');
+        a.download = filename;
+        a.href = url;
+        a.click();
+      };
+
+      recorder.stop();
+    } else {
+      console.log('Prepairing video and audio streams for recording');
+      let stream = new MediaStream();
+      videoStream = canvas.captureStream(30);
+      videoStream.getTracks().map(t => stream.addTrack(t));
+      audioStream.getTracks().map(t => stream.addTrack(t));
+
+      console.log('Starting recording a stream with',
+        stream.getTracks().length, 'media tracks');
+      recorder = new MediaRecorder(stream);
+      chunks = [];
+      recorder.ondataavailable =
+        (e) => void chunks.push(e.data);
+      recorder.start();
+    }
+  };
 }
 
 function setMouseHandlers() {
   btnMic.onclick = async () => {
     let controller = getAudioController();
     controller.stop();
-    let stream = await navigator.mediaDevices.getUserMedia(
+    audioStream = await navigator.mediaDevices.getUserMedia(
       { audio: config.audio });
     console.log('Captured microphone stream.');
-    controller.start(stream);
+    controller.start(audioStream);
   };
 
   canvas.onclick = async e => {
@@ -51,14 +103,11 @@ function setMouseHandlers() {
   };
 
   btnUpload.onclick = async () => {
-    let { audio, stream, file } = await selectAudioFile();
-    if (!stream) return;
-
+    let file = await selectAudioFile();
+    if (!file) return;
     let controller = getAudioController();
     controller.stop();
-
-    audio.loop = true;
-    controller.start(stream, file, audio);
+    controller.start(audioStream, file, audio);
   };
 }
 
@@ -115,9 +164,9 @@ async function selectAudioFile() {
     file.size / 2 ** 10 | 0, 'KB', file.name);
   document.title = file.name;
 
-  console.log('Creating an <audio> element to render the file');
-  let audio = document.createElement('audio');
-  audio.src = URL.createObjectURL(file);
+  let url = URL.createObjectURL(file);
+  audio.src = url;
+  console.log('audio.src =', url);
 
   await new Promise(resolve => {
     audio.onloadeddata =
@@ -125,9 +174,9 @@ async function selectAudioFile() {
   });
 
   console.log('Capturing audio stream');
-  let stream = audio.captureStream();
+  audioStream = audio.captureStream();
 
-  console.log('Got media stream from <audio>:', stream.id,
-    'tracks:', stream.getTracks().map(t => t));
-  return { audio, stream, file };
+  console.log('Got media stream from <audio>:', audioStream.id,
+    'tracks:', audioStream.getTracks().map(t => t));
+  return file;
 }

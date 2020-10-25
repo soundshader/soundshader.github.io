@@ -12,7 +12,7 @@ First, a few examples from David Parsons:
 
 ![](../../pics/acf-4.png)
 
-Now a few soundtracks from Quake 2:
+A few soundtracks from Quake 2:
 
 ![](../../pics/acf-6.png)
 
@@ -23,6 +23,16 @@ Now a few soundtracks from Quake 2:
 Some club music:
 
 ![](../../pics/acf-9.png)
+
+Female vocal:
+
+![](../../pics/song-1.png)
+
+![](../../pics/song-2.png)
+
+Classical music (Vivaldi):
+
+![](../../pics/vivaldi-1.png)
 
 And a remarkable example (also David Parsons):
 
@@ -114,7 +124,7 @@ Most people would probably recognize the image above as a "mandala", but it's re
 
 # Questions?
 
-Feel free to ask questions in [github.com/soundshader](https://github.com/soundshader/soundshader.github.io) or shoot me a email at [ssgh@aikh.org](mailto:ssgh@aikh.org).
+Open an issue on [github](https://github.com/soundshader/soundshader.github.io) or shoot me a email at [ssgh@aikh.org](mailto:ssgh@aikh.org).
 
 # License
 

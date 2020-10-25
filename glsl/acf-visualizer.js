@@ -253,8 +253,8 @@ class GpuColorizer extends GpuTransformProgram {
         const float R_MAX = 0.75;
         const float R_GAIN = 1.5;
         const float N_SIGMA = float(${sigma});
-        const vec3 RGB_A = vec3(1.0, 2.0, 4.0);
-        const vec3 RGB_B = vec3(0.5, 1.5, 4.0);
+        const vec3 RGB_A = vec3(4.0, 2.0, 1.0);
+        const vec3 RGB_B = vec3(1.0, 2.0, 4.0);
 
         uniform vec3 uColor;
         uniform sampler2D uHeightMap;
