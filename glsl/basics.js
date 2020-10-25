@@ -37,6 +37,13 @@ export const shaderUtils = `
     return abs(x) > abs(y) ?
       atan(y, x) : ${Math.PI / 2} - atan(x, y);
   }
+
+  // |x| < 1 -> |y| < 1
+  float gain(float x, float w) {
+    float h = max(0.0, 1.0 - abs(x));
+    float a = pow(h, w);
+    return -sign(x) * (a - 1.0);
+  }
 `;
 
 export const textureUtils = `

@@ -50,7 +50,7 @@ export class GpuTransformProgram {
       let uptr = gp.uniforms[u.name];
 
       if (arg === undefined)
-        throw new Error('Missing uniform arg:', u.name);
+        throw new Error('Missing uniform arg: ' + u.name);
 
       if (u.size != 1)
         throw new Error(`Uniform ${u.name} has size ${u.size} > 1`);

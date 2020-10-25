@@ -1,6 +1,6 @@
 let args = new URLSearchParams(location.search);
 
-export const SIZE = +args.get('n') || 2048;
+export const SIZE = +args.get('n') || 1024;
 export const USE_MOUSE = args.get('mouse') != '0';
 export const USE_CWT = args.get('s') == 'cwt';
 export const USE_FFT = args.get('s') == 'fft';

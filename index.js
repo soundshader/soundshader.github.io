@@ -16,11 +16,11 @@ let config = {
 window.onload = () => void main();
 
 function main() {
-  canvas.width = Math.min(2048, config.size);
-  canvas.height = Math.min(2048, config.size);
+  canvas.width = Math.min(1024, config.size);
+  canvas.height = Math.min(1024, config.size);
   setKeyboardHandlers();
   setMouseHandlers();
-  divStats.textContent = 'Select a mp3 file or use mic to start.';
+  divStats.textContent = 'Select a mp3 file or use mic.';
 }
 
 function setMouseHandlers() {

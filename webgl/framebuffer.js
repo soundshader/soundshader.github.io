@@ -1,3 +1,5 @@
+const MAX_BUFFER_SIZE = 2 ** 29;
+
 export class GpuFrameBuffer {
   constructor(glctx, {
     size,
@@ -19,6 +21,16 @@ export class GpuFrameBuffer {
       width = size;
       height = size;
     }
+
+    let fb_size = width * height * channels * 4;
+    let spec = `${width}x${height}x${channels}`;
+    let note = `${spec} = ${fb_size >> 20} MB`;
+
+    if (fb_size > MAX_BUFFER_SIZE)
+      throw new Error(`FBO too large: ${note}`);
+
+    if (fb_size > 2 ** 23)
+      console.log(`Allocating a GPU buffer: ${note}`);
 
     let args = glctx.prepareFrameBuffer(width, height, channels);
 

@@ -1,93 +1,83 @@
 import { FFT } from "../audio/fft.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
-import { shaderUtils, textureUtils } from "./basics.js";
+import { textureUtils, shaderUtils } from "./basics.js";
 import { GpuStatsProgram } from "./stats.js";
 
+const ACF_GRAD = 0;
+const MAX_ACF_SIZE = 2048; // too slow otherwise
+
 export class GpuAcfVisualizerProgram {
-  constructor(webgl, { size }) {
+  constructor(webgl, { waveformLen, canvasSize }) {
     this.webgl = webgl;
-    this.image1 = new GpuFrameBuffer(webgl, { size: size * 2 });
-    this.image2 = new GpuFrameBuffer(webgl, { size: size * 2 });
 
-    this.recorder = new GpuRecorder(webgl, { size: size * 2 });
+    // N = waveform.length
+    // FFT = N x (re, im)
+    // ACF = N x (re)
+
+    let size = Math.min(waveformLen, MAX_ACF_SIZE);
+    let aa = size / canvasSize;
+
+    console.log('ACF initializing with config:',
+      'wave =', waveformLen,
+      'fft size =', size,
+      'canvas =', canvasSize);
+
+    if (aa != Math.floor(aa))
+      throw new Error('ACF MSAA cant work with ' + aa);
+
+    this.gpuACF = new GpuACF(webgl, { size: waveformLen });
+    this.recorder = new GpuRecorder(webgl, { size });
     this.heightMap = new GpuHeightMapProgram(webgl, { size });
-    this.gradMap = new GpuGradientProgram(webgl, { size });
     this.stats = new GpuStatsProgram(webgl, { size });
-    this.colorizer = new GpuColorizer(webgl);
-    this.mixer = new GpuMixer(webgl);
+    this.downsampler = new GpuDownsampler(webgl, { size, aa });
+    this.colorizer = new GpuColorizer(webgl, { sigma: 3.5 });
 
+    this.acfBuffer = new GpuFrameBuffer(webgl, { width: 1, height: waveformLen });
+    this.acfBufferAA = new GpuFrameBuffer(webgl, { width: 1, height: size });
+    this.acfImage1 = new GpuFrameBuffer(webgl, { size });
+    this.acfImage2 = new GpuFrameBuffer(webgl, { size });
+    this.heightMapAA = new GpuFrameBuffer(webgl, { size: size / aa, channels: 4 });
     this.heightMapStats = new GpuFrameBuffer(webgl, { size, channels: 4 });
-    this.gradMapStats = new GpuFrameBuffer(webgl, { size, channels: 4 });
-    this.heightMapRGBA = new GpuFrameBuffer(webgl, { size, channels: 4 });
-    this.gradMapRGBA = new GpuFrameBuffer(webgl, { size, channels: 4 });
-
-    // canvas = size x size
-    // FFT = 2*size x (re, im)
-    // ACF = 2*size x (re)
-
-    this.gpuACF = new GpuACF(webgl, { size: size * 2 });
-
-    this.acfBuffer = new GpuFrameBuffer(webgl, {
-      width: 1,
-      height: size * 2,
-    });
   }
 
-  exec({ uWaveForm, uMousePos }, output) {
-    this.gpuACF.exec({ uWaveForm }, this.acfBuffer);
+  exec({ uWaveFormRaw, uMousePos }, output) {
+    this.gpuACF.exec({
+      uWaveFormRaw,
+    }, this.acfBuffer);
 
-    [this.image1, this.image2] =
-      [this.image2, this.image1];
+    this.downsampler.exec({
+      uImage: this.acfBuffer,
+    }, this.acfBufferAA);
+
+    [this.acfImage1, this.acfImage2] =
+      [this.acfImage2, this.acfImage1];
+
+    this.recorder.exec({
+      uImage: this.acfImage1,
+      uSlice: this.acfBufferAA,
+    }, this.acfImage2);
 
     let [mx, my] = uMousePos;
     let zoom = 1.0 + Math.exp(my * 5.0);
-    let balance = mx * 0.5 + 0.5;
-
-    this.recorder.exec({
-      uImage: this.image1,
-      uSlice: this.acfBuffer,
-    }, this.image2);
 
     this.heightMap.exec({
       uZoom: zoom,
-      uACF: this.image2,
+      uACF: this.acfImage2,
     });
 
-    if (balance > 0.01) {
-      this.stats.exec({
-        uData: this.heightMap.output,
-      }, this.heightMapStats);
+    this.stats.exec({
+      uData: this.heightMap.output,
+    }, this.heightMapStats);
 
-      this.colorizer.exec({
-        uColor: [1, 2, 4],
-        uAverage: 1,
-        uHeightMap: this.heightMap.output,
-        uHeightMapStats: this.heightMapStats,
-      }, this.heightMapRGBA);
-    }
+    this.downsampler.exec({
+      uImage: this.heightMap.output,
+    }, this.heightMapAA);
 
-    if (balance < 0.99) {
-      this.gradMap.exec({
-        uACF: this.heightMap.output,
-      });
-
-      this.stats.exec({
-        uData: this.gradMap.output,
-      }, this.gradMapStats);
-
-      this.colorizer.exec({
-        uColor: [4, 2, 1],
-        uAverage: 0,
-        uHeightMap: this.gradMap.output,
-        uHeightMapStats: this.gradMapStats,
-      }, this.gradMapRGBA);
-    }
-
-    this.mixer.exec({
-      uBalance: balance,
-      uImage1: this.gradMapRGBA,
-      uImage2: this.heightMapRGBA,
+    this.colorizer.exec({
+      uColor: [1, 2, 4],
+      uHeightMap: this.heightMapAA,
+      uHeightMapStats: this.heightMapStats,
     }, output);
   }
 }
@@ -101,8 +91,20 @@ class GpuACF {
     let height = this.fft.shader.height;
 
     this.temp = new Float32Array(size * 2);
+    this.temp0 = new GpuFrameBuffer(webgl, { width, height });
     this.temp1 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
     this.temp2 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
+
+    this.expand = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+        uniform sampler2D uInput;
+        void main() {
+          float re = texture(uInput, vTex).x;
+          v_FragColor = vec4(re, 0.0, 0.0, 0.0);
+        }
+      `,
+    });
 
     this.sqrabs = new GpuTransformProgram(webgl, {
       fshader: `
@@ -143,10 +145,14 @@ class GpuACF {
     });
   }
 
-  exec({ uWaveForm }, uACF) {
+  exec({ uWaveFormRaw }, uACF) {
     if (uACF.width != 1 || uACF.height != this.size)
       throw new Error('ACF output must be a 1xN buffer');
-    this.fft.transform(uWaveForm, this.temp2);
+    if (uWaveFormRaw.length != this.size)
+      throw new Error('ACF waveform must have N samples');
+    this.temp0.source = uWaveFormRaw;
+    this.expand.exec({ uInput: this.temp0 }, this.temp1);
+    this.fft.transform(this.temp1, this.temp2);
     this.sqrabs.exec({ uInput: this.temp2 }, this.temp1);
     // In general, ACF[X] needs to do inverseFFT[S]
     // here, but since S is real and ACF[X] is also
@@ -161,6 +167,7 @@ class GpuACF {
 class GpuHeightMapProgram extends GpuTransformProgram {
   constructor(webgl, { size }) {
     super(webgl, {
+      channels: 4,
       size,
       fshader: `
         in vec2 v;
@@ -170,19 +177,45 @@ class GpuHeightMapProgram extends GpuTransformProgram {
 
         const float N = float(${size});
         const float PI = ${Math.PI};
+        const bool GRAD = ${!!ACF_GRAD};
 
         ${textureUtils}
 
-        float h_acf(float a) {
+        float h_acf(vec2 ta) {
+          return textureSmooth(uACF, ta).x;
+        }
+
+        float t_grad(vec2 ta) {
+          const vec2 dt = vec2(1.0, 0.0) / N;
+          float h1 = h_acf(ta - dt);
+          float h2 = h_acf(ta + dt);
+          return (h2 - h1) * 0.5 * N;
+        }
+
+        float a_grad(vec2 ta) {
+          const vec2 da = vec2(0.0, 1.0) / N;
+          float h1 = h_acf(ta - da);
+          float h2 = h_acf(ta + da);
+          return (h2 - h1) * 0.5 * N;
+        }
+
+        vec4 fetch() {
           float r = length(v);
           float t = 1.0 - r * 0.5 / uZoom;
-          return textureSmooth(uACF, vec2(t, a)).x;
+          float a = -0.25 + 0.5 * atan(v.y, v.x) / PI;
+
+          vec2 ta = vec2(t, a);
+
+          return vec4(
+            h_acf(ta),
+            GRAD ? t_grad(ta) : 0.0,
+            GRAD ? a_grad(ta) : 0.0,
+            0.0);
         }
 
         void main () {
-          float a = atan(v.y, v.x) / PI * 0.5;
-          float h = h_acf(a - 0.25);
-          v_FragColor = vec4(h);
+          v_FragColor = length(v) < 1.0 ?
+            fetch() : vec4(0.0);
         }
       `,
     });
@@ -199,38 +232,10 @@ class GpuGradientProgram extends GpuTransformProgram {
 
         uniform sampler2D uACF;
 
-        const float N = float(${size});
-        const vec2 DX = vec2(1.0/N, 0.0);
-        const vec2 DY = vec2(0.0, 1.0/N);
-
-        float fetch(vec2 vTex) {
-          return texture(uACF, vTex).x;
-        }
-
-        float grad(vec2 vTex) {
-          float h1 = fetch(vTex - DX);
-          float h2 = fetch(vTex + DX);
-          float h3 = fetch(vTex - DY);
-          float h4 = fetch(vTex + DY);
-
-          float d1 = fetch(vTex + DX - DY);
-          float d2 = fetch(vTex + DX + DY);
-          float d3 = fetch(vTex - DX + DY);
-          float d4 = fetch(vTex - DX - DY);
-
-          float gx1 = (h2 - h1) * 0.5;
-          float gy1 = (h4 - h3) * 0.5;
-          float gx2 = (d2 - d4) * 0.5 / sqrt(2.0);
-          float gy2 = (d1 - d3) * 0.5 / sqrt(2.0);
-
-          float g1 = sqrt(gx1*gx1 + gy1*gy1);
-          float g2 = sqrt(gx2*gx2 + gy2*gy2);
-
-          return (g1 + g2) * 0.5 * N;
-        }
-
         void main () {
-          float g = grad(vTex);
+          vec4 acf = texture(uACF, vTex);
+          // float g = length(acf.yz);
+          float g = acf.z;
           v_FragColor = vec4(g);
         }
       `,
@@ -239,18 +244,38 @@ class GpuGradientProgram extends GpuTransformProgram {
 }
 
 class GpuColorizer extends GpuTransformProgram {
-  constructor(webgl) {
+  constructor(webgl, { sigma }) {
     super(webgl, {
       fshader: `
         in vec2 v;
         in vec2 vTex;
 
+        const float R_MIN = 0.2;
+        const float R_MAX = 0.8;
+        const float R_GAIN = 1.5;
+        const float N_SIGMA = float(${sigma});
+
         uniform vec3 uColor;
-        uniform float uAverage;
         uniform sampler2D uHeightMap;
         uniform sampler2D uHeightMapStats;
 
-        void main () {
+        ${shaderUtils}
+
+        float fadeoff(float r) {
+          float r0 = 0.5 * (1.0 + R_MAX);
+          float dr = 0.5 * (1.0 - R_MAX);
+          return 0.5 + 0.5 * gain((r0 - r) / dr, R_GAIN);
+        }
+
+        float fadein(float r) {
+          float r0 = 0.5 * R_MIN;
+          return 0.5 + 0.5 * gain((r - r0) / r0, R_GAIN);
+        }
+
+        vec4 rgba(vec2 vTex) {
+          float r = length(v);
+          if (r > 0.99) return vec4(0.0);
+
           float h = texture(uHeightMap, vTex).x;
           vec4 stats = texture(uHeightMapStats, vec2(0.0));
 
@@ -259,9 +284,57 @@ class GpuColorizer extends GpuTransformProgram {
           float h_avg = stats.z; // +/- 0.0
           float sigma = stats.w; // 0.3..0.5
 
-          float val = abs(mix(h, h - h_avg, uAverage));
-          vec3 rgb = uColor * val / 3.0 / sigma;
-          v_FragColor = vec4(clamp(rgb, 0.0, 1.0), 1.0);
+          float lum = abs(h) / (N_SIGMA * sigma);
+
+          vec3 rgb = uColor * lum;
+          rgb = clamp(rgb, 0.0, 1.0);
+          rgb *= fadeoff(r);
+          rgb *= fadein(r);
+          return vec4(rgb, 1.0);
+        }
+
+        void main () {
+          v_FragColor = rgba(vTex);
+        }
+      `,
+    });
+  }
+}
+
+class GpuDownsampler extends GpuTransformProgram {
+  constructor(webgl, { size, aa }) {
+    super(webgl, {
+      fshader: `
+        in vec2 v;
+        in vec2 vTex;
+
+        const int K_AA = ${aa};
+        const int N = ${size};
+
+        uniform sampler2D uImage;
+
+        vec4 rgba(vec2 vTex) {
+          return texture(uImage, vTex);
+        }
+
+        vec4 rgba_aa(vec2 vTex) {
+          const float mid = float(K_AA/2) - 0.5;
+          vec4 sum = vec4(0.0);
+
+          for (int i = 0; i < K_AA; i++) {
+            for (int j = 0; j < K_AA; j++) {
+              vec2 ds = vec2(float(i) - mid, float(j) - mid);
+              sum += rgba(vTex + ds / float(N));
+            }
+          }
+
+          return sum / float(K_AA * K_AA);
+        }
+
+        void main () {
+          v_FragColor = K_AA > 1 ?
+            rgba_aa(vTex) :
+            rgba(vTex);
         }
       `,
     });
@@ -306,6 +379,26 @@ class GpuMixer extends GpuTransformProgram {
           vec4 tex1 = texture(uImage1, vTex);
           vec4 tex2 = texture(uImage2, vTex);
           v_FragColor = mix(tex1, tex2, uBalance);
+        }
+      `,
+    });
+  }
+}
+
+class GpuMirror extends GpuTransformProgram {
+  constructor(webgl, { dx, dy }) {
+    super(webgl, {
+      fshader: `
+        in vec2 v;
+
+        const vec2 DIR = vec2(
+          float(${dx}), float(${dy}));
+
+        uniform sampler2D uImage;
+
+        void main() {
+          vec2 u = dot(DIR, v) < 0.0 ? v : reflect(v, DIR);
+          v_FragColor = texture(uImage, u * 0.5 + 0.5);
         }
       `,
     });

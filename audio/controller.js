@@ -29,11 +29,18 @@ export class AudioController {
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = fftSize;
 
+    console.log('waveform:', fftSize, 'samples',
+      '@', this.analyser.sampleRate, 'Hz');
+
     this.maxTime = this.fftHalfSize;
     this.maxFreq = this.audioCtx.sampleRate / 2; // usually ~22.5 kHz
     this.running = false;
     this.started = false;
     this.timeStep = 0;
+
+    this.waveform = new Float32Array(fftSize);
+    this.fftInput = new Float32Array(fftSize * 2);
+    this.fftOutput = new Float32Array(fftSize * 2);
 
     if (vargs.USE_CWT) {
       this.cwt = new CWT(this.fftHalfSize, {
@@ -48,10 +55,6 @@ export class AudioController {
     this.fft = new FFT(fftSize, {
       webgl: vargs.FFT_GL && this.webgl,
     });
-
-    this.waveform = new Float32Array(fftSize);
-    this.fftInput = new Float32Array(fftSize * 2);
-    this.fftOutput = new Float32Array(fftSize * 2);
 
     this.initMouse();
   }
@@ -86,6 +89,8 @@ export class AudioController {
 
     let args = {
       size: this.fftHalfSize,
+      waveformLen: this.waveform.length,
+      canvasSize: this.canvas.width,
       maxFreq: this.maxFreq,
       logScale: vargs.FFT_LOG_SCALE,
     };
@@ -126,6 +131,7 @@ export class AudioController {
       uTime: time,
       uMousePos: [this.mouseX, this.mouseY],
       uWaveForm: this.fftInput,
+      uWaveFormRaw: this.waveform,
       uFFT: this.fftFrameBuffer,
       uMaxTime: this.maxTime / 60, // audio captured at 60 fps
       uMaxFreq: this.maxFreq,
@@ -207,9 +213,10 @@ export class AudioController {
 
     this.waveform.fill(0);
     this.analyser.getFloatTimeDomainData(this.waveform);
-
-    FFT.expand(this.waveform, this.fftInput);
+    
     if (vargs.USE_ACF) return;
+
+    FFT.expand(this.waveform, this.fftInput);    
     FFT.forward(this.fftInput, this.fftOutput);
 
     for (let i = 0; i < n / 2; i++) {
