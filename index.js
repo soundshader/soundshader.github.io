@@ -16,8 +16,8 @@ let config = {
 window.onload = () => void main();
 
 function main() {
-  canvas.width = Math.min(1024, config.size);
-  canvas.height = Math.min(1024, config.size);
+  canvas.width = vargs.IMAGE_SIZE;
+  canvas.height = vargs.IMAGE_SIZE;
   setKeyboardHandlers();
   setMouseHandlers();
   divStats.textContent = 'Select a mp3 file or use mic.';
@@ -111,7 +111,8 @@ async function selectAudioFile() {
   });
 
   if (!file) return {};
-  console.log('Selected file:', file.type, file.size, 'bytes', file.name);
+  console.log('Selected file:', file.type,
+    file.size / 2 ** 10 | 0, 'KB', file.name);
   document.title = file.name;
 
   console.log('Creating an <audio> element to render the file');

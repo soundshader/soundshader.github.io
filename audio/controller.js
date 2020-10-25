@@ -29,9 +29,6 @@ export class AudioController {
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = fftSize;
 
-    console.log('waveform:', fftSize, 'samples',
-      '@', this.analyser.sampleRate, 'Hz');
-
     this.maxTime = this.fftHalfSize;
     this.maxFreq = this.audioCtx.sampleRate / 2; // usually ~22.5 kHz
     this.running = false;
@@ -101,21 +98,19 @@ export class AudioController {
     if (vargs.USE_FFT) {
       this.renderers.push(
         new GpuSpectrogramProgram(this.webgl, args));
-    }
-
-    if (vargs.USE_ACF) {
+    } else if (vargs.USE_ACF) {
       this.renderers.push(
         new GpuAcfVisualizerProgram(this.webgl, args));
+    } else {
+      this.renderers.push(
+        new GpuAcfAnalyzerProgram(this.webgl, args),
+        new GpuPatternAudioProgram(this.webgl, args),
+        new GpuPolarHarmonicsProgram(this.webgl, args),
+        new GpuZTransformProgram(this.webgl, args),
+        new GpuHarmonicsProgram(this.webgl, args),
+        new GpuRadialHarmonicsProgram(this.webgl, args),
+        new GpuChromagramProgram(this.webgl, args));
     }
-
-    this.renderers.push(
-      new GpuAcfAnalyzerProgram(this.webgl, args),
-      new GpuPatternAudioProgram(this.webgl, args),
-      new GpuPolarHarmonicsProgram(this.webgl, args),
-      new GpuZTransformProgram(this.webgl, args),
-      new GpuHarmonicsProgram(this.webgl, args),
-      new GpuRadialHarmonicsProgram(this.webgl, args),
-      new GpuChromagramProgram(this.webgl, args));
   }
 
   switchAudioRenderer() {
@@ -149,6 +144,12 @@ export class AudioController {
     this.stream = audioStream;
     this.source = this.audioCtx.createMediaStreamSource(this.stream);
     this.source.connect(this.analyser);
+
+    console.log('Audio waveform:', this.waveform.length, 'samples',
+      '@', this.audioCtx.sampleRate, 'Hz',
+      'x', this.source.channelCount, 'channels',
+      (audioEl?.duration || 0) | 0, 'sec');
+
     this.started = true;
     this.resume();
   }
@@ -185,9 +186,12 @@ export class AudioController {
       if (time > time0 + 1000) {
         let dt = (time - time0) / 1e3;
         let fps = (this.timeStep - frames) / dt | 0;
+        let sr = this.audioCtx.sampleRate;
+        let nw = this.waveform.length;
+        let t = this.analyser.context.currentTime | 0;
         // This awkward construct avoids re-creating DOM text nodes.
         let node = this.stats.firstChild || this.stats;
-        node.textContent = `${fps} fps`;
+        node.textContent = `${fps} fps ${sr} Hz / ${nw} @ ${t} s`;
         time0 = time;
         frames = this.timeStep;
       }
@@ -213,10 +217,10 @@ export class AudioController {
 
     this.waveform.fill(0);
     this.analyser.getFloatTimeDomainData(this.waveform);
-    
+
     if (vargs.USE_ACF) return;
 
-    FFT.expand(this.waveform, this.fftInput);    
+    FFT.expand(this.waveform, this.fftInput);
     FFT.forward(this.fftInput, this.fftOutput);
 
     for (let i = 0; i < n / 2; i++) {

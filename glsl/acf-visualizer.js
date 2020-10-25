@@ -31,7 +31,7 @@ export class GpuAcfVisualizerProgram {
     this.heightMap = new GpuHeightMapProgram(webgl, { size });
     this.stats = new GpuStatsProgram(webgl, { size });
     this.downsampler = new GpuDownsampler(webgl, { size, aa });
-    this.colorizer = new GpuColorizer(webgl, { sigma: 3.5 });
+    this.colorizer = new GpuColorizer(webgl, { sigma: 2.5 });
 
     this.acfBuffer = new GpuFrameBuffer(webgl, { width: 1, height: waveformLen });
     this.acfBufferAA = new GpuFrameBuffer(webgl, { width: 1, height: size });
@@ -75,7 +75,6 @@ export class GpuAcfVisualizerProgram {
     }, this.heightMapAA);
 
     this.colorizer.exec({
-      uColor: [1, 2, 4],
       uHeightMap: this.heightMapAA,
       uHeightMapStats: this.heightMapStats,
     }, output);
@@ -250,10 +249,12 @@ class GpuColorizer extends GpuTransformProgram {
         in vec2 v;
         in vec2 vTex;
 
-        const float R_MIN = 0.2;
-        const float R_MAX = 0.8;
+        const float R_MIN = 0.05;
+        const float R_MAX = 0.75;
         const float R_GAIN = 1.5;
         const float N_SIGMA = float(${sigma});
+        const vec3 RGB_A = vec3(1.0, 2.0, 4.0);
+        const vec3 RGB_B = vec3(0.5, 1.5, 4.0);
 
         uniform vec3 uColor;
         uniform sampler2D uHeightMap;
@@ -285,9 +286,10 @@ class GpuColorizer extends GpuTransformProgram {
           float sigma = stats.w; // 0.3..0.5
 
           float lum = abs(h) / (N_SIGMA * sigma);
-
-          vec3 rgb = uColor * lum;
+          
+          vec3 rgb = lum * mix(RGB_B, RGB_A, sign(h)*0.5 + 0.5);
           rgb = clamp(rgb, 0.0, 1.0);
+
           rgb *= fadeoff(r);
           rgb *= fadein(r);
           return vec4(rgb, 1.0);
