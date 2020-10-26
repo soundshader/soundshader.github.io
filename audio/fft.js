@@ -7,8 +7,6 @@ import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 
 // but could be be made a lot faster with WASM or GLSL.
 export class FFT {
-  static instances = new Map;
-
   static get(size) {
     let fft = FFT.instances.get(size);
     if (!fft) {
@@ -265,6 +263,8 @@ export class FFT {
     }
   }
 }
+
+FFT.instances = new Map; // FF doesn't support static fields
 
 export class GpuFFT extends GpuTransformProgram {
   constructor(webgl, { size, revidx }) {
