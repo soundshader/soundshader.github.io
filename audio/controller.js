@@ -4,12 +4,6 @@ import { CWT } from "./cwt.js";
 import { GpuContext } from "../webgl/gpu-context.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuSpectrogramProgram } from "../glsl/spectrogram.js";
-import { GpuPatternAudioProgram } from "../glsl/pattern-audio.js";
-import { GpuChromagramProgram } from "../glsl/chromagram.js";
-import { GpuRadialHarmonicsProgram } from "../glsl/radial-harmonics.js";
-import { GpuHarmonicsProgram } from "../glsl/harmonics.js";
-import { GpuZTransformProgram } from "../glsl/ztransform.js";
-import { GpuPolarHarmonicsProgram } from "../glsl/polar-harmonics.js";
 import { GpuAcfVisualizerProgram } from '../glsl/acf-visualizer.js';
 import { GpuWaveformProgram as GpuAcfAnalyzerProgram } from '../glsl/acf-analyzer.js';
 
@@ -95,22 +89,10 @@ export class AudioController {
     this.rendererId = 0;
     this.renderers = [];
 
-    if (vargs.USE_FFT) {
-      this.renderers.push(
-        new GpuSpectrogramProgram(this.webgl, args));
-    } else if (vargs.USE_ACF) {
-      this.renderers.push(
-        new GpuAcfVisualizerProgram(this.webgl, args));
-    } else {
-      this.renderers.push(
-        new GpuAcfAnalyzerProgram(this.webgl, args),
-        new GpuPatternAudioProgram(this.webgl, args),
-        new GpuPolarHarmonicsProgram(this.webgl, args),
-        new GpuZTransformProgram(this.webgl, args),
-        new GpuHarmonicsProgram(this.webgl, args),
-        new GpuRadialHarmonicsProgram(this.webgl, args),
-        new GpuChromagramProgram(this.webgl, args));
-    }
+    this.renderers.push(
+      new GpuAcfVisualizerProgram(this.webgl, args),
+      new GpuSpectrogramProgram(this.webgl, args),
+      new GpuAcfAnalyzerProgram(this.webgl, args));
   }
 
   switchAudioRenderer() {

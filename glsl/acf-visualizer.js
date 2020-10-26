@@ -20,7 +20,7 @@ export class GpuAcfVisualizerProgram {
 
     console.log('ACF initializing with config:',
       'wave =', waveformLen,
-      'fft size =', size,
+      'fft =', size,
       'canvas =', canvasSize);
 
     if (aa != Math.floor(aa))
@@ -305,26 +305,26 @@ class GpuColorizer extends GpuTransformProgram {
           return 0.5 + 0.5 * gain((r - r0) / r0, R_GAIN);
         }
 
-        vec3 hcolor_0(float h) {
+        vec3 hcolor_1(float h) {
           return clamp(abs(h) * COLOR_2, 0.0, 1.0);
         }        
 
-        vec3 hcolor_1(float h) {
+        vec3 hcolor_2(float h) {
           float s = sign(h) * 0.5 + 0.5;
           vec3 rgb = mix(COLOR_2, COLOR_1, s);
           return clamp(abs(h) * rgb, 0.0, 1.0);
         }
 
-        vec3 hcolor_2(float h) {
-          vec3 c1 = 0.2 * hcolor_0(h);
-          vec3 c2 = 0.2 * hcolor_0(h * 1.5);
-          vec3 c3 = 0.2 * hcolor_0(h * 2.0);
-          vec3 c4 = 0.2 * hcolor_0(h * 2.5);
-          vec3 c5 = 0.2 * hcolor_0(h * 3.0);
+        vec3 hcolor_3(float h) {
+          vec3 c1 = 0.2 * hcolor_1(h);
+          vec3 c2 = 0.2 * hcolor_1(h * 1.5);
+          vec3 c3 = 0.2 * hcolor_1(h * 2.0);
+          vec3 c4 = 0.2 * hcolor_1(h * 2.5);
+          vec3 c5 = 0.2 * hcolor_1(h * 3.0);
           return c1 + c2 + c3 + c4 + c5;
         }
 
-        vec3 hcolor_3(float h) {
+        vec3 hcolor_4(float h) {
           vec3 n = grad2(vTex);
           vec3 l = vec3(1.0 - vTex * 2.0, 1.0);
           vec3 v = reflect(-l, n);

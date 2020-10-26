@@ -176,8 +176,5 @@ async function selectAudioFile() {
 
   console.log('Capturing audio stream');
   audioStream = audio.captureStream();
-
-  console.log('Got media stream from <audio>:', audioStream.id,
-    'tracks:', audioStream.getTracks().map(t => t));
   return file;
 }
