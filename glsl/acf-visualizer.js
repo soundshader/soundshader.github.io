@@ -3,8 +3,8 @@ import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
 import { textureUtils, shaderUtils } from "./basics.js";
 import { GpuStatsProgram } from "./stats.js";
+import { ACF_COLOR_SCHEME } from "../vargs.js";
 
-const ACF_PHONG_SHADING = 0;
 const MAX_ACF_SIZE = 2048; // too slow otherwise
 
 export class GpuAcfVisualizerProgram {
@@ -33,7 +33,7 @@ export class GpuAcfVisualizerProgram {
     this.downsampler1 = new GpuDownsampler(webgl, { width: size, height: size, aa });
     this.downsampler2 = new GpuDownsampler(webgl,
       { width: 1, height: waveformLen, aa: Math.log2(waveformLen / size) });
-    this.colorizer = new GpuColorizer(webgl, { size, sigma: 3.0 });
+    this.colorizer = new GpuColorizer(webgl, { size, sigma: 3.5 });
 
     this.acfBuffer = new GpuFrameBuffer(webgl, { width: 1, height: waveformLen });
     this.acfBufferAA = new GpuFrameBuffer(webgl, { width: 1, height: size });
@@ -305,20 +305,26 @@ class GpuColorizer extends GpuTransformProgram {
           return 0.5 + 0.5 * gain((r - r0) / r0, R_GAIN);
         }
 
-        vec3 hcolor(float h) {
+        vec3 hcolor_0(float h) {
+          return clamp(abs(h) * COLOR_2, 0.0, 1.0);
+        }        
+
+        vec3 hcolor_1(float h) {
           float s = sign(h) * 0.5 + 0.5;
           vec3 rgb = mix(COLOR_2, COLOR_1, s);
           return clamp(abs(h) * rgb, 0.0, 1.0);
         }
 
-        vec3 hcolor2(float h) {
-          vec3 c1 = 0.33 * hcolor(h);
-          vec3 c2 = 0.33 * hcolor(h * 1.4);
-          vec3 c3 = 0.33 * hcolor(h * 2.0);
-          return c1 + c2 + c3;
+        vec3 hcolor_2(float h) {
+          vec3 c1 = 0.2 * hcolor_0(h);
+          vec3 c2 = 0.2 * hcolor_0(h * 1.5);
+          vec3 c3 = 0.2 * hcolor_0(h * 2.0);
+          vec3 c4 = 0.2 * hcolor_0(h * 2.5);
+          vec3 c5 = 0.2 * hcolor_0(h * 3.0);
+          return c1 + c2 + c3 + c4 + c5;
         }
 
-        vec3 hcolor_bp(float h) {
+        vec3 hcolor_3(float h) {
           vec3 n = grad2(vTex);
           vec3 l = vec3(1.0 - vTex * 2.0, 1.0);
           vec3 v = reflect(-l, n);
@@ -339,7 +345,7 @@ class GpuColorizer extends GpuTransformProgram {
           if (r > 0.99) return vec4(0.0);
 
           float h = h_acf(vTex);
-          vec3 rgb = ${ACF_PHONG_SHADING ? 'hcolor_bp' : 'hcolor'}(h);
+          vec3 rgb = hcolor_${ACF_COLOR_SCHEME}(h);
           vec4 rgba = vec4(rgb, 1.0);
           rgba *= fadeoff(r);
           rgba *= fadein(r);

@@ -1,5 +1,6 @@
 import { GpuFrameBuffer } from "./framebuffer.js";
 import { GpuProgram } from "./gpu-program.js";
+import { USE_ALPHA_CHANNEL } from "../vargs.js";
 
 export class GpuContext {
   constructor(canvas) {
@@ -64,7 +65,7 @@ export class GpuContext {
     console.log('Initializing WebGL');
 
     let params = {
-      alpha: true,
+      alpha: USE_ALPHA_CHANNEL,
       depth: false,
       stencil: false,
       antialias: false,
