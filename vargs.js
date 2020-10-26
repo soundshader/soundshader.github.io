@@ -1,7 +1,8 @@
 let args = new URLSearchParams(location.search);
 
 export const SIZE = +args.get('n') || 2048;
-export const SAMPLE_RATE = +args.get('sr') || 44100;
+export const SAMPLE_RATE = +args.get('sr') || 44.1;
+export const PLAYBACK_RATE = +args.get('pbr') || 1.0;
 export const IMAGE_SIZE = +args.get('is') || 1024;
 export const USE_MOUSE = args.get('mouse') != '0';
 export const ACF_COLOR_SCHEME = +args.get('acf.cs') || 2;

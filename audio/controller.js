@@ -19,7 +19,10 @@ export class AudioController {
   init() {
     let fftSize = this.fftHalfSize * 2;
 
-    this.audioCtx = new AudioContext({ sampleRate: vargs.SAMPLE_RATE });
+    this.audioCtx = new AudioContext({
+      sampleRate: vargs.SAMPLE_RATE * 1e3 | 0,
+    });
+    
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = fftSize;
 

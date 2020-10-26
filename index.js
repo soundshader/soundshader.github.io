@@ -167,7 +167,9 @@ async function selectAudioFile() {
 
   let url = URL.createObjectURL(file);
   audio.src = url;
-  console.log('audio.src =', url);
+  audio.playbackRate = vargs.PLAYBACK_RATE;
+  console.log('audio.src =', url,
+    'playbackRate =', audio.playbackRate);
 
   await new Promise(resolve => {
     audio.onloadeddata =
