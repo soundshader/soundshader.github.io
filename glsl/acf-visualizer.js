@@ -3,9 +3,7 @@ import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
 import { textureUtils, shaderUtils } from "./basics.js";
 import { GpuStatsProgram } from "./stats.js";
-import { ACF_COLOR_SCHEME } from "../vargs.js";
-
-const MAX_ACF_SIZE = 2048; // too slow otherwise
+import * as vargs from "../vargs.js";
 
 export class GpuAcfVisualizerProgram {
   constructor(webgl, { waveformLen, canvasSize }) {
@@ -15,7 +13,7 @@ export class GpuAcfVisualizerProgram {
     // FFT = N x (re, im)
     // ACF = N x (re)
 
-    let size = Math.min(waveformLen, MAX_ACF_SIZE);
+    let size = Math.min(waveformLen, vargs.ACF_MAX_SIZE);
     let aa = Math.log2(size / canvasSize);
 
     console.log('ACF initializing with config:',
@@ -61,10 +59,10 @@ export class GpuAcfVisualizerProgram {
     }, this.acfImage2);
 
     let [mx, my] = uMousePos;
-    let zoom = 1.0 + Math.exp(my * 5.0);
 
     this.heightMap.exec({
-      uZoom: zoom,
+      uZoom: 1.0 + Math.exp(my * 10.0),
+      uExp: Math.exp(mx * 10.0),
       uACF: this.acfImage2,
     });
 
@@ -175,9 +173,12 @@ class GpuHeightMapProgram extends GpuTransformProgram {
 
         uniform sampler2D uACF;
         uniform float uZoom;
+        uniform float uExp;
 
         const float N = float(${size});
         const float PI = ${Math.PI};
+
+        ${shaderUtils}
 
         ${textureUtils}
 
@@ -201,8 +202,9 @@ class GpuHeightMapProgram extends GpuTransformProgram {
 
         vec4 fetch() {
           float r = length(v);
-          float t = 1.0 - r * 0.5 / uZoom;
-          float a = -0.25 + 0.5 * atan(v.y, v.x) / PI;
+          float t = 1.0 - pow(r, uExp) / uZoom;
+          if (t < 0.5 / N) return vec4(0.0);
+          float a = -0.25 + 0.5 * atan2(v.y, v.x) / PI;
           vec2 ta = vec2(t, a);
           return vec4(h_acf(ta), 0.0, 0.0, 0.0);
         }
@@ -352,7 +354,7 @@ class GpuColorizer extends GpuTransformProgram {
           if (r > 0.99) return vec4(0.0);
 
           float h = h_acf(vTex);
-          vec3 rgb = hcolor_${ACF_COLOR_SCHEME}(h);
+          vec3 rgb = hcolor_${vargs.ACF_COLOR_SCHEME}(h);
           vec4 rgba = vec4(rgb, 1.0);
           rgba *= fadeoff(r);
           // rgba *= fadein(r);
