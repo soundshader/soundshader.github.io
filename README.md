@@ -2,7 +2,7 @@
 
 ACF is a simple method to visualize music that produces surprisingly good results. Perhaps the most unexpected property of ACF is that it accurately transfers the subjective "harmony level" from music to images. If we could define a function `H(sound)` that gives `0` to the ugliest sound possible (e.g. nails on chalkboard) and `1` to the most harmonical sound, and similar for images, then it seems that `H(sound) = H(ACF(sound))`, where `ACF(sound) = image`. It's almost an unreasonable property, if you think about it.
 
-Live demo: [https://soundshader.github.io/?s=acf](https://soundshader.github.io/?s=acf)
+Live demo: [soundshader.github.io](https://soundshader.github.io/).
 
 First, a few examples from David Parsons:
 

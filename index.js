@@ -61,7 +61,7 @@ function setRecordingHandler() {
     } else {
       console.log('Prepairing video and audio streams for recording');
       let stream = new MediaStream();
-      videoStream = canvas.captureStream(30);
+      videoStream = canvas.captureStream(vargs.REC_FRAMERATE);
       videoStream.getTracks().map(t => stream.addTrack(t));
       audioStream.getTracks().map(t => stream.addTrack(t));
 

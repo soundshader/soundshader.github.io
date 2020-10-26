@@ -33,7 +33,7 @@ export class GpuAcfVisualizerProgram {
     this.downsampler1 = new GpuDownsampler(webgl, { width: size, height: size, aa });
     this.downsampler2 = new GpuDownsampler(webgl,
       { width: 1, height: waveformLen, aa: Math.log2(waveformLen / size) });
-    this.colorizer = new GpuColorizer(webgl, { size, sigma: 3.5 });
+    this.colorizer = new GpuColorizer(webgl, { size, sigma: 3.0 });
 
     this.acfBuffer = new GpuFrameBuffer(webgl, { width: 1, height: waveformLen });
     this.acfBufferAA = new GpuFrameBuffer(webgl, { width: 1, height: size });
@@ -307,7 +307,7 @@ class GpuColorizer extends GpuTransformProgram {
 
         vec3 hcolor_1(float h) {
           return clamp(abs(h) * COLOR_2, 0.0, 1.0);
-        }        
+        }
 
         vec3 hcolor_2(float h) {
           float s = sign(h) * 0.5 + 0.5;
@@ -340,6 +340,13 @@ class GpuColorizer extends GpuTransformProgram {
           return clamp(lum * COLOR_1, 0.0, 1.0);
         }
 
+        vec3 hcolor_5(float h) {
+          float s = sign(h) * 0.5 + 0.5;
+          float g = 1.0 / (1.0 - min(0.0, log(abs(h * 2.0)) / log(1.5)));
+          vec3 rgb = mix(COLOR_2, COLOR_1, s);
+          return clamp(g * rgb, 0.0, 1.0);
+        }
+
         vec4 rgba(vec2 vTex) {
           float r = length(v);
           if (r > 0.99) return vec4(0.0);
@@ -348,7 +355,7 @@ class GpuColorizer extends GpuTransformProgram {
           vec3 rgb = hcolor_${ACF_COLOR_SCHEME}(h);
           vec4 rgba = vec4(rgb, 1.0);
           rgba *= fadeoff(r);
-          rgba *= fadein(r);
+          // rgba *= fadein(r);
           return rgba;
         }
 
@@ -393,6 +400,7 @@ class GpuDownsampler {
   constructor(webgl, { width, height, channels, aa }) {
     this.aa = aa;
     this.shader = new GpuDownsampler2x2(webgl);
+    this.copy = new GpuTransformProgram(webgl);
     this.buffers = [];
 
     for (let i = 0; i < aa - 1; i++) {
@@ -406,6 +414,11 @@ class GpuDownsampler {
 
   exec({ uImage }, target) {
     let aa = this.aa;
+
+    if (!aa) {
+      this.copy.exec({ uInput: uImage }, target);
+      return;
+    }
 
     for (let i = 0; i < aa; i++) {
       let input = this.buffers[i - 1] || uImage;
