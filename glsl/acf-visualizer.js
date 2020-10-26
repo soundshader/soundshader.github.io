@@ -4,7 +4,7 @@ import { GpuTransformProgram } from "../webgl/transform.js";
 import { textureUtils, shaderUtils } from "./basics.js";
 import { GpuStatsProgram } from "./stats.js";
 
-const ACF_GRAD = 0;
+const ACF_PHONG_SHADING = 0;
 const MAX_ACF_SIZE = 2048; // too slow otherwise
 
 export class GpuAcfVisualizerProgram {
@@ -31,7 +31,7 @@ export class GpuAcfVisualizerProgram {
     this.heightMap = new GpuHeightMapProgram(webgl, { size });
     this.stats = new GpuStatsProgram(webgl, { size });
     this.downsampler = new GpuDownsampler(webgl, { size, aa });
-    this.colorizer = new GpuColorizer(webgl, { sigma: 3.0 });
+    this.colorizer = new GpuColorizer(webgl, { size, sigma: 3.0 });
 
     this.acfBuffer = new GpuFrameBuffer(webgl, { width: 1, height: waveformLen });
     this.acfBufferAA = new GpuFrameBuffer(webgl, { width: 1, height: size });
@@ -75,6 +75,7 @@ export class GpuAcfVisualizerProgram {
     }, this.heightMapAA);
 
     this.colorizer.exec({
+      uMX: mx * 0.5 + 0.5,
       uHeightMap: this.heightMapAA,
       uHeightMapStats: this.heightMapStats,
     }, output);
@@ -166,7 +167,6 @@ class GpuACF {
 class GpuHeightMapProgram extends GpuTransformProgram {
   constructor(webgl, { size }) {
     super(webgl, {
-      channels: 4,
       size,
       fshader: `
         in vec2 v;
@@ -176,7 +176,6 @@ class GpuHeightMapProgram extends GpuTransformProgram {
 
         const float N = float(${size});
         const float PI = ${Math.PI};
-        const bool GRAD = ${!!ACF_GRAD};
 
         ${textureUtils}
 
@@ -202,14 +201,8 @@ class GpuHeightMapProgram extends GpuTransformProgram {
           float r = length(v);
           float t = 1.0 - r * 0.5 / uZoom;
           float a = -0.25 + 0.5 * atan(v.y, v.x) / PI;
-
           vec2 ta = vec2(t, a);
-
-          return vec4(
-            h_acf(ta),
-            GRAD ? t_grad(ta) : 0.0,
-            GRAD ? a_grad(ta) : 0.0,
-            0.0);
+          return vec4(h_acf(ta), 0.0, 0.0, 0.0);
         }
 
         void main () {
@@ -243,12 +236,13 @@ class GpuGradientProgram extends GpuTransformProgram {
 }
 
 class GpuColorizer extends GpuTransformProgram {
-  constructor(webgl, { sigma }) {
+  constructor(webgl, { size, sigma }) {
     super(webgl, {
       fshader: `
         in vec2 v;
         in vec2 vTex;
 
+        const float N = ${size}.0;
         const float R_MIN = 0.05;
         const float R_MAX = 0.75;
         const float R_GAIN = 1.5;
@@ -256,11 +250,47 @@ class GpuColorizer extends GpuTransformProgram {
         const vec3 COLOR_1 = vec3(4.0, 2.0, 1.0);
         const vec3 COLOR_2 = vec3(1.0, 2.0, 4.0);
 
-        uniform vec3 uColor;
+        const vec2 dx = vec2(1.0, 0.0) / N;
+        const vec2 dy = vec2(0.0, 1.0) / N;
+
+        uniform float uMX;
         uniform sampler2D uHeightMap;
         uniform sampler2D uHeightMapStats;
 
         ${shaderUtils}
+
+        float h_acf(vec2 vTex) {
+          float h = texture(uHeightMap, vTex).x;
+          vec4 stats = texture(uHeightMapStats, vec2(0.0));
+
+          float h_min = stats.x; // -5*sigma
+          float h_max = stats.y; // +5*sigma
+          float h_avg = stats.z; // +/- 0.0
+          float sigma = stats.w; // 0.3..0.5
+
+          return h / N_SIGMA / sigma;
+        }
+
+        vec3 grad(vec2 vTex) {
+          float h1 = h_acf(vTex - dx);
+          float h2 = h_acf(vTex + dx);
+          float h3 = h_acf(vTex - dy);
+          float h4 = h_acf(vTex + dy);
+
+          float hx = (h2 - h1) * 0.5 * N;
+          float hy = (h4 - h3) * 0.5 * N;
+
+          vec3 g = vec3(hx, hy, 1.0);
+          return normalize(g);
+        }
+
+        vec3 grad2(vec2 vTex) {
+          vec3 g1 = grad(vTex - dx);
+          vec3 g2 = grad(vTex + dx);
+          vec3 g3 = grad(vTex - dy);
+          vec3 g4 = grad(vTex + dy);
+          return 0.25 * (g1 + g2 + g3 + g4);
+        }
 
         float fadeoff(float r) {
           float r0 = 0.5 * (1.0 + R_MAX);
@@ -286,19 +316,28 @@ class GpuColorizer extends GpuTransformProgram {
           return c1 + c2 + c3;
         }
 
+        vec3 hcolor_bp(float h) {
+          vec3 n = grad2(vTex);
+          vec3 l = vec3(1.0 - vTex * 2.0, 1.0);
+          vec3 v = reflect(-l, n);
+          vec3 b = normalize(v + l);
+
+          // Blinn-Phong reflection model:
+          // vr.cs.uiuc.edu/node198.html
+
+          float lambert = abs(dot(n, l));
+          float blinn = pow(abs(dot(n, b)), 1500.0);
+          float lum = 0.4 * lambert + 0.6 * blinn;
+
+          return clamp(lum * COLOR_1, 0.0, 1.0);
+        }
+
         vec4 rgba(vec2 vTex) {
           float r = length(v);
           if (r > 0.99) return vec4(0.0);
 
-          float h = texture(uHeightMap, vTex).x;
-          vec4 stats = texture(uHeightMapStats, vec2(0.0));
-
-          float h_min = stats.x; // -5*sigma
-          float h_max = stats.y; // +5*sigma
-          float h_avg = stats.z; // +/- 0.0
-          float sigma = stats.w; // 0.3..0.5
-
-          vec3 rgb = hcolor2(h / N_SIGMA / sigma);
+          float h = h_acf(vTex);
+          vec3 rgb = ${ACF_PHONG_SHADING ? 'hcolor_bp' : 'hcolor'}(h);
           vec4 rgba = vec4(rgb, 1.0);
           rgba *= fadeoff(r);
           rgba *= fadein(r);

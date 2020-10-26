@@ -95,19 +95,20 @@ export class GpuProgram {
   }
 
   static reportError(shader, source) {
-    let log = gl.getShaderInfoLog(shader);
+    let log = gl.getShaderInfoLog(shader) || '';
     let [, col, row] = /^ERROR: (\d+):(\d+):/.exec(log) || [];
+    let message = log.split('\n')[0];
 
     if (row) {
       let lines = source.split(/\n/g);
       let line = lines[+row - 1];
-      console.warn('Error at line ' + row + ':', line.trim());
+      message += ' in "' + line.trim() + '"';
     }
 
     console.groupCollapsed('Failed shader:');
     console.log(source);
     console.groupEnd();
 
-    throw new Error(log);
+    throw new Error(message);
   }
 }
