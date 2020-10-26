@@ -44,19 +44,19 @@ Looking at the first example, we can tell that there are 5 prominent peaks in a 
 
 > There is also a peculiar assymetry between red and blue wavelets, as well as between the small wavelets on the 5 peaks. I don't know what audible effect this corresponds to.
 
-![](pics/acf-c-1.png)
-
-IIRC, this is ACF of a bird song:
-
-![](pics/acf-c-3.png)
+conventional music    | a bird song
+--------------------- | ---------------------
+![](pics/acf-c-1.png) | ![](pics/acf-c-3.png)
 
 # Visualizing the FFT phase
 
 ACF drops the phase component. However the phase can be extracted from the first FFT and mixed with the ACF shape. On the examples below, the radial coordinate is the ACF value, while color is the FFT phase. The first image is a 20 ms sample of conventional music, while the next two images are bird songs. The phase appears mostly continuous, with sudden jumps in certain places. The discontinuities might be caused by rounding errors in the FFT algorithm, but I haven't looked into this deeper.
 
-![](pics/phase-1.png)
+conventional music    | a bird song
+--------------------- | ---------------------
+![](pics/phase-1.png) | ![](pics/phase-3.png)
 
-![](pics/phase-3.png)
+I couldn't find a visually appealing way to incorporate these FFT phase colors into ACF images. But I don't think it's even necessary: sampling ACF with an overlap effectively captures the phase.
 
 # How I came up with this idea
 
