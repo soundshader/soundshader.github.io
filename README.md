@@ -70,7 +70,7 @@ How would you extract periodic patterns from a short 20 ms sample of sound and a
 
 # Questions?
 
-Open an issue on github or shoot me a email: ssgh@aikh.org.
+Open an issue on github or shoot me a email: ssgh@aikh.org
 
 # License
 

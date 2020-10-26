@@ -6,6 +6,8 @@ Different images use slightly different coloring schemes. Usually, linear mappin
 ----------------------- | ----------------------- | -------------------------- | -----------------------
 ![](../pics/bird-2.png) | ![](../pics/bowl-1.png) | ![](../pics/bowl-2.png)    | ![](../pics/bird-3.png)
 
+# Some ACF videos
+
 A few recorded videos below use the same coloring scheme except that they assign blue colors to negative ACF values and yellow colors to positive ACF values. The brightness is still determined by the absolute value of ACF.
 
 - [Bowl](../vids/bowl.webm). That's perhaps the archetypical sound that demonstrates the sound frequency (rotational symmetry), amplitude modulations (radial waves) and phase modulation (the change in shape along the time axis).
@@ -15,3 +17,5 @@ A few recorded videos below use the same coloring scheme except that they assign
 - [Vivaldi](../vids/vivaldi.webm)
 - [Parsons](../vids/parsons.webm). That's my favorite example so far.
 - [Quake II](../vids/quake2.webm)
+
+You might have noticed an interesting visual effect in the middle of ACFs with bird songs. I don't know where this effect comes from, but one explanantion is the undersampling: close to the center, one pixel covers 100s of pixels in the flat (rectangular) ACF image. The undersampling occurs due to mapping from rectangular to polar coordinates. 
