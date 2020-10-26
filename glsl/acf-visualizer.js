@@ -16,7 +16,7 @@ export class GpuAcfVisualizerProgram {
     // ACF = N x (re)
 
     let size = Math.min(waveformLen, MAX_ACF_SIZE);
-    let aa = size / canvasSize;
+    let aa = Math.log2(size / canvasSize);
 
     console.log('ACF initializing with config:',
       'wave =', waveformLen,
@@ -24,20 +24,22 @@ export class GpuAcfVisualizerProgram {
       'canvas =', canvasSize);
 
     if (aa != Math.floor(aa))
-      throw new Error('ACF MSAA cant work with ' + aa);
+      throw new Error('ACF MSAA 2^N != ' + aa);
 
     this.gpuACF = new GpuACF(webgl, { size: waveformLen });
     this.recorder = new GpuRecorder(webgl, { size });
     this.heightMap = new GpuHeightMapProgram(webgl, { size });
     this.stats = new GpuStatsProgram(webgl, { size });
-    this.downsampler = new GpuDownsampler(webgl, { size, aa });
+    this.downsampler1 = new GpuDownsampler(webgl, { width: size, height: size, aa });
+    this.downsampler2 = new GpuDownsampler(webgl,
+      { width: 1, height: waveformLen, aa: Math.log2(waveformLen / size) });
     this.colorizer = new GpuColorizer(webgl, { size, sigma: 3.0 });
 
     this.acfBuffer = new GpuFrameBuffer(webgl, { width: 1, height: waveformLen });
     this.acfBufferAA = new GpuFrameBuffer(webgl, { width: 1, height: size });
     this.acfImage1 = new GpuFrameBuffer(webgl, { size });
     this.acfImage2 = new GpuFrameBuffer(webgl, { size });
-    this.heightMapAA = new GpuFrameBuffer(webgl, { size: size / aa, channels: 4 });
+    this.heightMapAA = new GpuFrameBuffer(webgl, { size: size >> aa });
     this.heightMapStats = new GpuFrameBuffer(webgl, { size, channels: 4 });
   }
 
@@ -46,7 +48,7 @@ export class GpuAcfVisualizerProgram {
       uWaveFormRaw,
     }, this.acfBuffer);
 
-    this.downsampler.exec({
+    this.downsampler2.exec({
       uImage: this.acfBuffer,
     }, this.acfBufferAA);
 
@@ -70,7 +72,7 @@ export class GpuAcfVisualizerProgram {
       uData: this.heightMap.output,
     }, this.heightMapStats);
 
-    this.downsampler.exec({
+    this.downsampler1.exec({
       uImage: this.heightMap.output,
     }, this.heightMapAA);
 
@@ -352,15 +354,12 @@ class GpuColorizer extends GpuTransformProgram {
   }
 }
 
-class GpuDownsampler extends GpuTransformProgram {
-  constructor(webgl, { size, aa }) {
+class GpuDownsampler2x2 extends GpuTransformProgram {
+  constructor(webgl) {
     super(webgl, {
       fshader: `
         in vec2 v;
         in vec2 vTex;
-
-        const int K_AA = ${aa};
-        const int N = ${size};
 
         uniform sampler2D uImage;
 
@@ -368,27 +367,45 @@ class GpuDownsampler extends GpuTransformProgram {
           return texture(uImage, vTex);
         }
 
-        vec4 rgba_aa(vec2 vTex) {
-          const float mid = float(K_AA/2) - 0.5;
-          vec4 sum = vec4(0.0);
-
-          for (int i = 0; i < K_AA; i++) {
-            for (int j = 0; j < K_AA; j++) {
-              vec2 ds = vec2(float(i) - mid, float(j) - mid);
-              sum += rgba(vTex + ds / float(N));
-            }
-          }
-
-          return sum / float(K_AA * K_AA);
-        }
-
         void main () {
-          v_FragColor = K_AA > 1 ?
-            rgba_aa(vTex) :
-            rgba(vTex);
+          ivec2 size = textureSize(uImage, 0);
+          vec2 d = vec2(0.5, 0.5) / vec2(size);
+
+          vec4 u1 = rgba(vTex - d.x - d.y);
+          vec4 u2 = rgba(vTex - d.x + d.y);
+          vec4 u3 = rgba(vTex + d.x + d.y);
+          vec4 u4 = rgba(vTex + d.x - d.y);
+
+          v_FragColor = 0.25 * (u1 + u2 + u3 + u4);
         }
       `,
     });
+  }
+}
+
+class GpuDownsampler {
+  constructor(webgl, { width, height, channels, aa }) {
+    this.aa = aa;
+    this.shader = new GpuDownsampler2x2(webgl);
+    this.buffers = [];
+
+    for (let i = 0; i < aa - 1; i++) {
+      this.buffers[i] = new GpuFrameBuffer(webgl, {
+        channels,
+        width: Math.max(1, width >> (i + 1)),
+        height: Math.max(1, height >> (i + 1)),
+      });
+    }
+  }
+
+  exec({ uImage }, target) {
+    let aa = this.aa;
+
+    for (let i = 0; i < aa; i++) {
+      let input = this.buffers[i - 1] || uImage;
+      let output = this.buffers[i] || target;
+      this.shader.exec({ uImage: input }, output);
+    }
   }
 }
 

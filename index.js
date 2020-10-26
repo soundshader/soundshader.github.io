@@ -21,6 +21,7 @@ window.onload = () => void main();
 function main() {
   canvas.width = vargs.IMAGE_SIZE;
   canvas.height = vargs.IMAGE_SIZE;
+  console.log('canvas size:', vargs.IMAGE_SIZE);
   setKeyboardHandlers();
   setMouseHandlers();
   setRecordingHandler();
