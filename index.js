@@ -79,11 +79,11 @@ function setRecordingHandler() {
 function setMouseHandlers() {
   btnMic.onclick = async () => {
     let controller = getAudioController();
-    controller.stop();
+    await controller.stop();
     audioStream = await navigator.mediaDevices.getUserMedia(
       { audio: config.audio });
     console.log('Captured microphone stream.');
-    controller.start(audioStream);
+    await controller.start(audioStream);
   };
 
   canvas.onclick = async e => {
@@ -107,8 +107,8 @@ function setMouseHandlers() {
     let file = await selectAudioFile();
     if (!file) return;
     let controller = getAudioController();
-    controller.stop();
-    controller.start(audioStream, file, audio);
+    await controller.stop();
+    await controller.start(audioStream, file, audio);
   };
 }
 

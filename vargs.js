@@ -1,6 +1,7 @@
 let args = new URLSearchParams(location.search);
 
-export const SIZE = +args.get('n') || 1024;
+export const SIZE = +args.get('n') || 2048;
+export const SAMPLE_RATE = +args.get('sr') || 44100;
 export const IMAGE_SIZE = +args.get('is') || 1024;
 export const USE_MOUSE = args.get('mouse') != '0';
 export const USE_CWT = args.get('s') == 'cwt';

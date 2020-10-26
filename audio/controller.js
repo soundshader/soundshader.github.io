@@ -25,7 +25,7 @@ export class AudioController {
   init() {
     let fftSize = this.fftHalfSize * 2;
 
-    this.audioCtx = new AudioContext();
+    this.audioCtx = new AudioContext({ sampleRate: vargs.SAMPLE_RATE });
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = fftSize;
 
@@ -148,7 +148,7 @@ export class AudioController {
     console.log('Audio waveform:', this.waveform.length, 'samples',
       '@', this.audioCtx.sampleRate, 'Hz',
       'x', this.source.channelCount, 'channels',
-      (audioEl?.duration || 0) | 0, 'sec');
+      (audioEl ? audioEl.duration : 0) | 0, 'sec');
 
     this.started = true;
     this.resume();
@@ -156,7 +156,7 @@ export class AudioController {
 
   async stop() {
     if (!this.started) return;
-    this.audioEl?.pause();
+    this.audioEl && this.audioEl.pause();
     this.source.disconnect();
     let tracks = this.stream.getTracks();
     tracks.map(t => t.stop());
@@ -200,7 +200,7 @@ export class AudioController {
     };
 
     this.running = true;
-    this.audioEl?.play();
+    this.audioEl && this.audioEl.play();
     console.log('Audio resumed');
 
     animate();
@@ -208,7 +208,7 @@ export class AudioController {
 
   pause() {
     this.running = false;
-    this.audioEl?.pause();
+    this.audioEl && this.audioEl.pause();
     console.log('Audio paused');
   }
 
