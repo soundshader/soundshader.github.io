@@ -1,44 +1,14 @@
 # The AutoCorrelation Function
 
-ACF is a simple method to visualize music that produces surprisingly good results. Perhaps the most unexpected property of ACF is that it accurately transfers the subjective "harmony level" from music to images. If we could define a function `H(sound)` that gives `0` to the ugliest sound possible (e.g. nails on chalkboard) and `1` to the most harmonical sound, and similar for images, then it seems that `H(sound) = H(ACF(sound))`, where `ACF(sound) = image`. It's almost an unreasonable property, if you think about it.
+[ACF](https://en.wikipedia.org/wiki/Autocorrelation) is a simple method to visualize music that produces surprisingly good results. Perhaps the most unexpected property of ACF is that it accurately transfers the subjective "harmony level" from music to images. If we could define a function `H(sound)` that gives `0` to the ugliest sound possible (e.g. nails on chalkboard) and `1` to the most harmonical sound, and similar for images, then it seems that `H(sound) = H(ACF(sound))`, where `ACF(sound) = image`. It's almost an unreasonable property, if you think about it.
 
-Live demo: [soundshader.github.io](https://soundshader.github.io/).
+Female vocal         | David Parsons        | Vivaldi                 | a bird
+-------------------- | -------------------- | ----------------------- | ---
+![](pics/song-2.png) | ![](pics/bowl-3.png) | ![](pics/vivaldi-1.png) | ![](pics/bird-2.png)
 
-First, a few examples from David Parsons:
+More examples: [soundshader.github.io/gallery](https://soundshader.github.io/gallery/)
 
-![](pics/acf-1.png)
-
-![](pics/acf-3.png)
-
-![](pics/acf-4.png)
-
-A few soundtracks from Quake 2:
-
-![](pics/acf-6.png)
-
-![](pics/acf-7.png)
-
-![](pics/acf-8.png)
-
-Some club music:
-
-![](pics/acf-9.png)
-
-Female vocal:
-
-![](pics/song-1.png)
-
-![](pics/song-2.png)
-
-Classical music (Vivaldi):
-
-![](pics/vivaldi-1.png)
-
-And a remarkable example (also David Parsons):
-
-![](pics/bowl-1.png)
-
-Just by looking at these images we can make a good guess how the musical pieces behind them sound.
+Live demo: [soundshader.github.io](https://soundshader.github.io/)
 
 # Why ACF matches our perception of sound
 
@@ -76,35 +46,15 @@ Looking at the first example, we can tell that there are 5 prominent peaks in a 
 
 ![](pics/acf-c-1.png)
 
-Sometimes ACF can be strictly positive:
-
-![](pics/acf-c-2.png)
-
 IIRC, this is ACF of a bird song:
 
 ![](pics/acf-c-3.png)
-
-The naive approach to render ACF would be to assign a color brightness to the ACF amplitude. While this would capture all the information, our eyes won't see the 2% pixel to pixel variations in color brightness, so all the small wavelets that correspond to harmonics will be lost.
-
-Instead, we could assign color not only to the ACF magnitude, but also to the magnitude of its gradient `ACF'[i]`. This is going to capture all the wavelets. In theory, we could also consider capturing the 2nd derivative `ACF''[i]`, although I don't know if this would capture any audible properties of sound.
-
-![](pics/acf-c-4.png)
-
-![](pics/acf-c-5.png)
-
-Finally, all the sound samples are assembled together:
-
-![](pics/acf-10.png)
-
-![](pics/acf-11.png)
 
 # Visualizing the FFT phase
 
 ACF drops the phase component. However the phase can be extracted from the first FFT and mixed with the ACF shape. On the examples below, the radial coordinate is the ACF value, while color is the FFT phase. The first image is a 20 ms sample of conventional music, while the next two images are bird songs. The phase appears mostly continuous, with sudden jumps in certain places. The discontinuities might be caused by rounding errors in the FFT algorithm, but I haven't looked into this deeper.
 
 ![](pics/phase-1.png)
-
-![](pics/phase-2.png)
 
 ![](pics/phase-3.png)
 
@@ -117,10 +67,6 @@ Music is a temporal ornament. There are many types of ornaments, e.g. the 17 typ
 - The 3rd observation is that if we take a tiny circular slice of a mandala `|r - r0| < eps`, and look at that circle as a `2*PI` periodic function of sound samples, we could trivially make it audible. The `2*PI` periodic structure will make the produced sound a combination of pure sinusoidal tones.
 
 How would you extract periodic patterns from a short 20 ms sample of sound and assemble them back into a `2*PI` periodic function? You'd take FFT of the 20 ms sample of sound, take magnitudes of the result, and combine the magnitudes back into a mix of sinusoidal waves with the inverse FFT. That's exactly what ACF is doing. And the nice property of FFT is that it can be computed in `N*log(N)` time.
-
-![](pics/bowl-2.png)
-
-Most people would probably recognize the image above as a "mandala", but it's really ACF of first 60 sec of one sonudtrack (David Parsons, "Himalaya").
 
 # Questions?
 
