@@ -20,7 +20,7 @@ Contrary to what you might think, our ears don't seem to rely on an FFT-like pro
 
 ![](https://auditoryneuroscience.com/sites/default/files/missingFundamental2.png)
 
-As can be clearly seen on the FFT image, the A signal is a pure sinusoidal tone, while B is a mix of tones. Despite each tone in B is higher than A, our ears perceive B as a lower tone. However if we plot both waveforms, we'll see that A has about 9 peaks in a 20 ms window, while B has only 5. The definition of "peak" is moot, but it doesn't stop our ears from counting them and using the "number of peaks per second" as a proxy to the tone height.
+As can be clearly seen on the FFT image, the A signal is a pure sinusoidal tone, while B is a mix of tones. Despite each tone in B is higher than A, our ears perceive B as a lower tone. If we plot both waveforms, we'll see that A has about 9 peaks in a 20 ms window, while B has only 5. The definition of "peak" is moot, but it doesn't stop our ears from counting them and using the "number of peaks per second" as a proxy to the tone height.
 
 ACF detects those peaks. ACF sees that there are 5 equally spaced time shifts where `B[t] * B[t + shift]` reaches the maximum, so on the ACF output we'll see those 5 peaks.
 
@@ -61,13 +61,13 @@ I couldn't find a visually appealing way to incorporate these FFT phase colors i
 
 # How I came up with this idea
 
-Music is a temporal ornament. There are many types of ornaments, e.g. the 17 types of wallpaper tesselations, but few of them look like music. However there is one particular type of ornament that resembles music a lot - those "mandala" images. I don't really know how and why those are produced, but I noticed a particular connection between those images and music.
+Music is a temporal ornament. There are many types of ornaments, e.g. the 17 types of wallpaper tesselations, but few of them look like music. However there is one particular type of ornament that resembles music a lot - I mean those "mandala" images. I don't know how and why those are produced, but I noticed a connection between those images and music:
 
-- The 1st obvious observation is that a mandala is drawn in polar coordinates and is `2*PI` periodic.
-- The 2nd observation is that the radial coordinate corresponds to time, while the angular coordinate corresponds to sound frequencies.
-- The 3rd observation is that we can take a tiny circular slice of a mandala `|r - r0| < eps`, and look at that circle as a `2*PI` periodic function of sound samples.
+- The 1st obvious observation is that a mandala is drawn in polar coordinates and is `2*PI` periodic. Sound is periodic too, so I thought the two facts are related.
+- The 2nd observation is that patterns on those images evolve over the radial axis. Ans so is music is a sequence of evolving sound patterns.
+- The 3rd observation is that a `2*PI` periodic function trivially corresponds to a set of frequencies. We usually use FFT to extract the frequencies and another FFT to restore the `2*PI` periodic function. Thus, a single radial slice of a mandala could encode a set of frequencies. If this is correct, a mandala is effectively an old school vinyl disk.
 
-How would you extract periodic patterns from a short 20 ms sample of sound and assemble them back into a `2*PI` periodic function? You'd take FFT of the 20 ms sample of sound, take magnitudes of the result, and combine the magnitudes back into a mix of sinusoidal waves with the inverse FFT. This is what ACF is.
+Putting these observations together we naturally arrive with the ACF idea.
 
 # Questions?
 
