@@ -170,6 +170,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
       size,
       fshader: `
         in vec2 v;
+        in vec2 vTex;
 
         uniform sampler2D uACF;
         uniform float uZoom;
@@ -200,18 +201,28 @@ class GpuHeightMapProgram extends GpuTransformProgram {
           return (h2 - h1) * 0.5 * N;
         }
 
-        vec4 fetch() {
+        vec4 fetch_0() {
           float r = length(v);
+          if (r > 0.99) return vec4(0.0);
+
           float t = 1.0 - pow(r, uExp) / uZoom;
           if (t < 0.5 / N) return vec4(0.0);
+          
           float a = -0.25 + 0.5 * atan2(v.y, v.x) / PI;
           vec2 ta = vec2(t, a);
           return vec4(h_acf(ta), 0.0, 0.0, 0.0);
         }
 
+        vec4 fetch_1() {
+          float r = 1.0 - vTex.y;
+          float a = vTex.x - 0.5;
+          float t = 1.0 - r / uZoom;
+          if (t < 0.5 / N) return vec4(0.0);
+          return vec4(h_acf(vec2(t, a)), 0.0, 0.0, 0.0);
+        }
+
         void main () {
-          v_FragColor = length(v) < 1.0 ?
-            fetch() : vec4(0.0);
+          v_FragColor = fetch_${vargs.ACF_COORDS}();
         }
       `,
     });
@@ -247,12 +258,12 @@ class GpuColorizer extends GpuTransformProgram {
         in vec2 vTex;
 
         const float N = ${size}.0;
-        const float R_MIN = 0.05;
         const float R_MAX = 0.75;
         const float R_GAIN = 1.5;
         const float N_SIGMA = float(${sigma});
         const vec3 COLOR_1 = vec3(4.0, 2.0, 1.0);
         const vec3 COLOR_2 = vec3(1.0, 2.0, 4.0);
+        const bool CIRCLE = ${vargs.ACF_COORDS == 0};
 
         const vec2 dx = vec2(1.0, 0.0) / N;
         const vec2 dy = vec2(0.0, 1.0) / N;
@@ -302,11 +313,6 @@ class GpuColorizer extends GpuTransformProgram {
           return 0.5 + 0.5 * gain((r0 - r) / dr, R_GAIN);
         }
 
-        float fadein(float r) {
-          float r0 = 0.5 * R_MIN;
-          return 0.5 + 0.5 * gain((r - r0) / r0, R_GAIN);
-        }
-
         vec3 hcolor_1(float h) {
           return clamp(abs(h) * COLOR_2, 0.0, 1.0);
         }
@@ -351,13 +357,13 @@ class GpuColorizer extends GpuTransformProgram {
 
         vec4 rgba(vec2 vTex) {
           float r = length(v);
-          if (r > 0.99) return vec4(0.0);
+          if (r > 0.99 && CIRCLE)
+            return vec4(0.0);
 
           float h = h_acf(vTex);
           vec3 rgb = hcolor_${vargs.ACF_COLOR_SCHEME}(h);
           vec4 rgba = vec4(rgb, 1.0);
-          rgba *= fadeoff(r);
-          // rgba *= fadein(r);
+          if (CIRCLE) rgba *= fadeoff(r);
           return rgba;
         }
 

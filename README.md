@@ -26,27 +26,24 @@ One downside of ACF is that it drops the phase component of the input signal, an
 
 # Visualizing ACF
 
-ACF of a sound sample `X[i]` can be computed using just FFT:
+ACF of a sound sample `X[0..N-1]` can be computed with two FFTs:
 
 ```
-Y = FFT[X]
-S[i] = |Y[i]|^2
+S = |FFT[X]|^2
 ACF[X] = FFT[S]
 ```
 
-And thus ACF contains exactly the same information as the spectral density `S` (the well known spectrogram), but presented in a periodic form.
+And thus ACF contains exactly the same information as the spectral density `S` (the well known spectrogram).
 
-> If you're familiar with the ACF definition, you'll notice that I should've used the inverse FFT in the last step. There is no mistake. The inverse FFT can be computed as `FFT[X*]*`, where `X*` is conjugation, but since `S[i]` is real-valued (and positive, in fact), the conjugate has no effect on it, and since ACF is also real valued in this case, the second conjugate has no effect either.
+> If you're familiar with the ACF definition, you'll notice that I should've used the inverse FFT in the last step. There is no mistake. The inverse FFT can be computed as `FFT[X*]*`, where `X*` is complex conjugate, but since `S[i]` is real-valued (and positive, in fact), the conjugate has no effect on it, and since ACF is also real valued in this case, the second conjugate has no effect either.
 
-ACF is a periodic function and so can be naturally rendered in polar coordinates. In most cases, ACF has a very elaborate structure. Below are some examples, where red = ACF > 0 and blue = ACF < 0.
-
-Looking at the first example, we can tell that there are 5 prominent peaks in a 20 ms sound sample, which corresponds to 250 Hz. This means that our ears will necesserarily perceive this sound as a 250 Hz tone, regardless of what its spectrogram says. If it was a pure 250 Hz tone, we'd see perfectly round shapes of the `r = cos(250Hz * t)` line, but it's not the case here: we see that the 5 peaks are modulated with small wavelets: there is one big wavelet in the middle (which consists of 3 smaller wavelets) and 4 smaller wavelets. Our ears will hear the big wavelet as the 2nd harmonic of the 250 Hz tone (i.e. it will be a 500 Hz tone with a smaller amplitude) and the 4 small wavelets as the 5th harmonic (1000 Hz) at barely discernible volume. In addition to that, the 500 Hz harmonic is also modulated by the 3 tiny wavelets, which means we'll hear a 1500 Hz tone, almost inaudible. We can say all this without even looking at the spectrogram or hearing the sound.
-
-> There is also a peculiar assymetry between red and blue wavelets, as well as between the small wavelets on the 5 peaks. I don't know what audible effect this corresponds to.
+ACF is a periodic and even function and so it can be naturally rendered in polar coordinates. In most cases, ACF has a very elaborate structure. Below are some examples, where red = ACF > 0 and blue = ACF < 0.
 
 conventional music    | a bird song
 --------------------- | ---------------------
 ![](pics/acf-c-1.png) | ![](pics/acf-c-3.png)
+
+Looking at the first example, we can tell that there are 5 prominent peaks in a 20 ms sound sample, which corresponds to 250 Hz. This means that our ears would necesserarily perceive this sound as a 250 Hz tone, regardless of what its spectrogram says. If it was a pure 250 Hz tone, we'd see perfectly round shapes of the `r = cos(250Hz * t)` line, but it's not the case here: we see that the 5 peaks are modulated with small wavelets: there is one big wavelet in the middle (which consists of 3 smaller wavelets) and 4 smaller wavelets. Our ears would hear the big wavelet as the 2nd harmonic of the 250 Hz tone (i.e. it would be a 500 Hz tone with a smaller amplitude) and the 4 small wavelets as the 5th harmonic (1000 Hz) at barely discernible volume. In addition to that, the 500 Hz harmonic is also modulated by the 3 tiny wavelets, which means we'd hear a 1500 Hz tone, almost inaudible. We can say all this without even looking at the spectrogram or hearing the sound.
 
 # Visualizing the FFT phase
 
@@ -64,9 +61,9 @@ Music is a temporal ornament. There are many types of ornaments, e.g. the 17 typ
 
 - The 1st obvious observation is that a mandala is drawn in polar coordinates and is `2*PI` periodic.
 - The 2nd observation is that the radial coordinate corresponds to time, while the angular coordinate corresponds to sound frequencies.
-- The 3rd observation is that if we take a tiny circular slice of a mandala `|r - r0| < eps`, and look at that circle as a `2*PI` periodic function of sound samples, we could trivially make it audible. The `2*PI` periodic structure will make the produced sound a combination of pure sinusoidal tones.
+- The 3rd observation is that we can take a tiny circular slice of a mandala `|r - r0| < eps`, and look at that circle as a `2*PI` periodic function of sound samples.
 
-How would you extract periodic patterns from a short 20 ms sample of sound and assemble them back into a `2*PI` periodic function? You'd take FFT of the 20 ms sample of sound, take magnitudes of the result, and combine the magnitudes back into a mix of sinusoidal waves with the inverse FFT. That's exactly what ACF is doing. And the nice property of FFT is that it can be computed in `N*log(N)` time.
+How would you extract periodic patterns from a short 20 ms sample of sound and assemble them back into a `2*PI` periodic function? You'd take FFT of the 20 ms sample of sound, take magnitudes of the result, and combine the magnitudes back into a mix of sinusoidal waves with the inverse FFT. This is what ACF is.
 
 # Questions?
 

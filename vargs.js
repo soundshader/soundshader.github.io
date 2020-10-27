@@ -7,6 +7,7 @@ export const IMAGE_SIZE = +args.get('is') || 1024;
 export const USE_MOUSE = args.get('mouse') != '0';
 export const ACF_COLOR_SCHEME = +args.get('acf.cs') || 2;
 export const ACF_MAX_SIZE = +args.get('acf.max') || 2048;
+export const ACF_COORDS = +args.get('acf.coords') || 0;
 export const REC_FRAMERATE = +args.get('rec.fps') || 30;
 export const CWT_BRIGHTNESS = +args.get('cwt.b') || 1;
 export const CWT_LEN = +args.get('cwt.len') || 17;
