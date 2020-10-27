@@ -69,6 +69,12 @@ Music is a temporal ornament. There are many types of ornaments, e.g. the 17 typ
 
 Putting these observations together we naturally arrive with the ACF idea.
 
+In fact, this idea can be extended to 3D-space. ACF correlates a wave with a delayed copy of itself: `ACF[p] = w[0..N] * w[p..N+p]`. Nothing stops us from computing a [tri-correlation](https://en.wikipedia.org/wiki/Triple_correlation):
+
+`ACF3[p, q] = w[0..N] * w[p..N+p] * w[q..N+q]`
+
+The `ACF3` function will be `N` periodic over both its parameters and thus can be naturally mapped to a sphere: `p` will become longitude and `q` - latitude. A series of `ACF3` spheres can be combined together the same way and we'd get a 3D equivalent of the images above. I don't know what the result would look like, but rendering it would need a really good GPU, as just storing the `ACF3` buffer would need about `S(N)` = `N^2*T*fps*sizeof(float)` = `8192^2*15*60*4` = 230 GB of GPU memory (well, 57 GB if we notice that ACF3 is an even function). On top of that, a raymarching algorithm would need to cast rays thru this spherical cloud, which is about `T(N)` = `O(N^3*fps)` ~ 245 TFlops (don't forget that interpolation of ACF3 values along the ray isn't free). That's on the edge of the $500K [DGX-2](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/dgx-1/dgx-2-datasheet-us-nvidia-955420-r2-web-new.pdf)'s ability.
+
 # Questions?
 
 Open an issue on github or shoot me a email: ssgh@aikh.org
