@@ -31,14 +31,14 @@ export class GpuAcfVisualizerProgram {
     this.downsampler1 = new GpuDownsampler(webgl, { width: size, height: size, aa });
     this.downsampler2 = new GpuDownsampler(webgl,
       { width: 1, height: waveformLen, aa: Math.log2(waveformLen / size) });
-    this.colorizer = new GpuColorizer(webgl, { size, sigma: 3.0 });
+    this.colorizer = new GpuColorizer(webgl, { size, sigma: vargs.ACF_SIGMA });
 
     this.acfBuffer = new GpuFrameBuffer(webgl, { width: 1, height: waveformLen });
     this.acfBufferAA = new GpuFrameBuffer(webgl, { width: 1, height: size });
     this.acfImage1 = new GpuFrameBuffer(webgl, { size });
     this.acfImage2 = new GpuFrameBuffer(webgl, { size });
     this.heightMapAA = new GpuFrameBuffer(webgl, { size: size >> aa });
-    this.heightMapStats = new GpuFrameBuffer(webgl, { size, channels: 4 });
+    this.heightMapStats = new GpuFrameBuffer(webgl, { size: 1, channels: 4 });
   }
 
   exec({ uWaveFormRaw, uMousePos }, output) {
@@ -62,7 +62,7 @@ export class GpuAcfVisualizerProgram {
 
     this.heightMap.exec({
       uZoom: 1.0 + Math.exp(my * 10.0),
-      uExp: Math.exp(mx * 10.0),
+      uExp: Math.exp(mx * vargs.ACF_EXP),
       uACF: this.acfImage2,
     });
 
