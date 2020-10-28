@@ -62,7 +62,7 @@ export class GpuProgram {
     return program;
   }
 
-  static prepareShader(source, type) {
+  static prepareShader(gl, source, type) {
     return [
       SHADER_PREFACE,
       type == gl.VERTEX_SHADER ?
@@ -83,7 +83,7 @@ export class GpuProgram {
   }
 
   static createShader(gl, type, source) {
-    const source2 = GpuProgram.prepareShader(source, type);
+    const source2 = GpuProgram.prepareShader(gl, source, type);
     const shader = gl.createShader(type);
     gl.shaderSource(shader, source2);
     gl.compileShader(shader);

@@ -34,7 +34,6 @@ export class GpuFrameBuffer {
 
     let args = glctx.prepareFrameBuffer(width, height, channels);
 
-    this.gl = glctx.gl;
     this.width = args.width;
     this.height = args.height;
     this.channels = channels;
@@ -43,6 +42,7 @@ export class GpuFrameBuffer {
     this.fmt = args.fmt;
     this.type = args.type;
     this.source = source;
+    this.gl = glctx.gl;
 
     this.clear();
   }
@@ -115,3 +115,5 @@ export class GpuFrameBuffer {
       offset);
   }
 }
+
+GpuFrameBuffer.DUMMY = 'dummy';

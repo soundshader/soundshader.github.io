@@ -1,20 +1,35 @@
 let args = new URLSearchParams(location.search);
 
-export const SIZE = +args.get('n') || 2048;
-export const SAMPLE_RATE = +args.get('sr') || 44.1;
-export const PLAYBACK_RATE = +args.get('pbr') || 1.0;
-export const IMAGE_SIZE = +args.get('is') || 1024;
-export const USE_MOUSE = args.get('mouse') != '0';
-export const ACF_COLOR_SCHEME = +args.get('acf.cs') || 2;
-export const ACF_EXP = +args.get('acf.exp') || 0;
-export const ACF_MAX_SIZE = +args.get('acf.max') || 2048;
-export const ACF_COORDS = +args.get('acf.coords') || 0;
-export const ACF_SIGMA = +args.get('acf.sig') || 3.0;
-export const REC_FRAMERATE = +args.get('rec.fps') || 30;
-export const CWT_BRIGHTNESS = +args.get('cwt.b') || 1;
-export const CWT_LEN = +args.get('cwt.len') || 17;
-export const CWT_N = +args.get('cwt.3s') || 30;
-export const CWT_GL = args.get('cwt.gl') != '0';
-export const FFT_GL = args.get('fft.gl') == '1';
-export const FFT_LOG_SCALE = args.get('fft.log') != '0';
-export const USE_ALPHA_CHANNEL = args.get('alpha') == '1';
+export const SIZE = numarg('n', 1024);
+export const SHADER = strarg('s', 'acf');
+export const SHADER_FPS = numarg('sfps', 50);
+export const SAMPLE_RATE = numarg('sr', 44.1);
+export const PLAYBACK_RATE = numarg('pbr', 1.0);
+export const IMAGE_SIZE = numarg('is', 1024);
+export const USE_MOUSE = numarg('mouse', 0);
+export const ACF_COLOR_SCHEME = numarg('acf.cs', 2);
+export const ACF_EXP = numarg('acf.exp', 0);
+export const ACF_MAX_SIZE = numarg('acf.max', 2048);
+export const ACF_COORDS = numarg('acf.coords', 0);
+export const ACF_SIGMA = numarg('acf.sig', 3.0);
+export const REC_FRAMERATE = numarg('rec.fps', 0);
+export const CWT_BRIGHTNESS = numarg('cwt.b', 1);
+export const CWT_LEN = numarg('cwt.len', 17);
+export const CWT_N = numarg('cwt.3s', 30);
+export const CWT_GL = numarg('cwt.gl', 1);
+export const FFT_GL = numarg('fft.gl', 0);
+export const FFT_LOG_SCALE = numarg('fft.log', 1);
+export const USE_ALPHA_CHANNEL = numarg('alpha', 0);
+
+function strarg(name, defval = '', regex = null) {
+  let value = args.get(name) || defval;
+  let info = 'URL arg ' + name + '=' + value;
+  console.log(info);
+  if (regex && !regex.test(value))
+    throw new Error(info + ' doesnt match ' + regex);
+  return value;
+}
+
+function numarg(name, defval = 0) {
+  return +strarg(name, defval + '', /^\d+(\.\d+)?$/);
+}

@@ -1,6 +1,7 @@
 import { GpuTransformProgram } from "../../../webgl/transform.js";
 import { shaderUtils } from "./basics.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
+import { FFT } from "../audio/fft.js";
 
 export class GpuSpectrogramProgram {
   constructor(webgl, { size, maxFreq, logScale = true }) {
@@ -9,16 +10,48 @@ export class GpuSpectrogramProgram {
     this.buffer2 = new GpuFrameBuffer(webgl, { size, channels: 2 });
     this.recorder = new GpuRecorder(webgl, { size });
     this.colorizer = new GpuColorizer(webgl, { size, maxFreq, logScale });
+
+    this.fftInput = new Float32Array(size * 4);
+    this.fftOutput = new Float32Array(size * 4);
+    this.fftArrayBuffer = new Float32Array(2 * size);
+    this.fftFrameBuffer = new GpuFrameBuffer(this.webgl, {
+      width: 1,
+      height: size,
+      channels: 2,
+      source: this.fftArrayBuffer,
+    });
   }
 
-  exec({ uFFT, uTime, uMaxTime, uMousePos }, output) {
+  record(uWaveFormRaw) {
+    FFT.expand(uWaveFormRaw, this.fftInput);
+    FFT.forward(this.fftInput, this.fftOutput);
+
+    let n = this.fftArrayBuffer.length;
+
+    for (let i = 0; i < n / 2; i++) {
+      let re = this.fftOutput[i * 2];
+      let im = this.fftOutput[i * 2 + 1];
+
+      let mag = Math.sqrt(re * re + im * im);
+      let arg = !mag ? 0 : Math.acos(re / mag);
+      if (im < 0) arg = -arg;
+
+      this.fftArrayBuffer[i * 2] = mag;
+      this.fftArrayBuffer[i * 2 + 1] = arg;
+    }
+
     [this.buffer1, this.buffer2] =
       [this.buffer2, this.buffer1];
 
     this.recorder.exec({
       uInput: this.buffer1,
-      uFFT,
+      uFFT: this.fftFrameBuffer,
     }, this.buffer2);
+  }
+
+  exec({ uTime, uMaxTime, uMousePos, uWaveFormRaw }, output) {
+    if (uWaveFormRaw)
+      this.record(uWaveFormRaw);
 
     this.colorizer.exec({
       uTimeStep: 1.0,

@@ -1,6 +1,4 @@
 import * as vargs from '../vargs.js';
-import { FFT } from "./fft.js";
-import { CWT } from "./cwt.js";
 import { GpuContext } from "../webgl/gpu-context.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuSpectrogramProgram } from "../glsl/spectrogram.js";
@@ -22,7 +20,7 @@ export class AudioController {
     this.audioCtx = new AudioContext({
       sampleRate: vargs.SAMPLE_RATE * 1e3 | 0,
     });
-    
+
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = fftSize;
 
@@ -31,25 +29,9 @@ export class AudioController {
     this.running = false;
     this.started = false;
     this.timeStep = 0;
-
     this.waveform = new Float32Array(fftSize);
-    this.fftInput = new Float32Array(fftSize * 2);
-    this.fftOutput = new Float32Array(fftSize * 2);
 
-    if (vargs.USE_CWT) {
-      this.cwt = new CWT(this.fftHalfSize, {
-        context: this.audioCtx,
-        canvas: this.canvas,
-        stats: this.stats,
-      });
-    } else {
-      this.initGpu();
-    }
-
-    this.fft = new FFT(fftSize, {
-      webgl: vargs.FFT_GL && this.webgl,
-    });
-
+    this.initGpu();
     this.initMouse();
   }
 
@@ -71,15 +53,6 @@ export class AudioController {
   initGpu() {
     this.webgl = new GpuContext(this.canvas);
     this.webgl.init();
-
-    // FFT[freq], for the latest audio sample
-    this.fftArrayBuffer = new Float32Array(2 * this.fftHalfSize);
-    this.fftFrameBuffer = new GpuFrameBuffer(this.webgl, {
-      width: 1,
-      height: this.fftHalfSize,
-      channels: 2,
-      source: this.fftArrayBuffer,
-    });
 
     let args = {
       size: this.fftHalfSize,
@@ -103,34 +76,26 @@ export class AudioController {
       % this.renderers.length;
   }
 
-  drawFrame() {
+  drawFrame(output = null) {
     let node = this.renderers[this.rendererId];
     let time = this.timeStep / this.maxTime;
 
     node.exec({
       uTime: time,
       uMousePos: [this.mouseX, this.mouseY],
-      uWaveForm: this.fftInput,
-      uWaveFormRaw: this.waveform,
-      uFFT: this.fftFrameBuffer,
+      uWaveFormRaw: output && this.waveform,
       uMaxTime: this.maxTime / 60, // audio captured at 60 fps
       uMaxFreq: this.maxFreq,
-    }, null);
+    }, output);
   }
 
   async start(audioStream, audioFile, audioEl) {
-    if (vargs.USE_CWT) {
-      await this.cwt.init(audioFile);
-      await this.cwt.render();
-      return;
-    }
-
     this.audioEl = audioEl;
     this.stream = audioStream;
     this.source = this.audioCtx.createMediaStreamSource(this.stream);
     this.source.connect(this.analyser);
 
-    console.log('Audio waveform:', this.waveform.length, 'samples',
+    console.log('Input sound:', this.waveform.length, 'samples/batch',
       '@', this.audioCtx.sampleRate, 'Hz',
       'x', this.source.channelCount, 'channels',
       (audioEl ? audioEl.duration : 0) | 0, 'sec');
@@ -159,13 +124,18 @@ export class AudioController {
     let time0 = 0;
     let frames = 0;
 
+    this.timerId = setInterval(() => {
+      if (!this.running)
+        return;
+      this.timeStep++;
+      this.captureFrame();
+      this.drawFrame(GpuFrameBuffer.DUMMY);
+    }, 1000 / vargs.SHADER_FPS);
+
     let animate = (time) => {
       if (!this.running)
         return;
-
-      this.captureFrame();
       this.drawFrame();
-      this.timeStep++;
       time0 = time0 || time;
 
       if (time > time0 + 1000) {
@@ -181,43 +151,28 @@ export class AudioController {
         frames = this.timeStep;
       }
 
-      requestAnimationFrame(animate);
+      this.animationId = requestAnimationFrame(animate);
     };
 
     this.running = true;
-    this.audioEl && this.audioEl.play();
     console.log('Audio resumed');
 
     animate();
+
+    this.audioEl && this.audioEl.play();
   }
 
   pause() {
     this.running = false;
     this.audioEl && this.audioEl.pause();
+    clearInterval(this.timerId);
+    cancelAnimationFrame(this.animationId);
+    this.timerId = 0;
+    this.animationId = 0;
     console.log('Audio paused');
   }
 
   captureFrame() {
-    let n = this.fftHalfSize * 2;
-
-    this.waveform.fill(0);
     this.analyser.getFloatTimeDomainData(this.waveform);
-
-    if (vargs.USE_ACF) return;
-
-    FFT.expand(this.waveform, this.fftInput);
-    FFT.forward(this.fftInput, this.fftOutput);
-
-    for (let i = 0; i < n / 2; i++) {
-      let re = this.fftOutput[i * 2];
-      let im = this.fftOutput[i * 2 + 1];
-
-      let mag = Math.sqrt(re * re + im * im);
-      let arg = !mag ? 0 : Math.acos(re / mag);
-      if (im < 0) arg = -arg;
-
-      this.fftArrayBuffer[i * 2] = mag;
-      this.fftArrayBuffer[i * 2 + 1] = arg;
-    }
   }
 }

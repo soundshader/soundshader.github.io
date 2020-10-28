@@ -99,9 +99,12 @@ export class GpuWaveformProgram extends GpuTransformProgram {
   }
 
   exec(args, output) {
-    FFT.forward(args.uWaveForm, this.fftData);
-    FFT.sqr_abs_reim(this.fftData, this.temp);
-    FFT.forward(this.temp, this.acfData);
+    if (args.uWaveFormRaw) {
+      FFT.expand(args.uWaveFormRaw, this.temp);
+      FFT.forward(this.temp, this.fftData);
+      FFT.sqr_abs_reim(this.fftData, this.temp);
+      FFT.forward(this.temp, this.acfData);
+    }
 
     super.exec({
       ...args,

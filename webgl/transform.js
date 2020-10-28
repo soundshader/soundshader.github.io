@@ -32,9 +32,10 @@ export class GpuTransformProgram {
   }
 
   exec(args = {}, output = this.output) {
+    if (output == GpuFrameBuffer.DUMMY)
+      return;
     let gl = this.glctx.gl;
     let gp = this.program;
-
     gp.bind();
     this.bindArgs(args);
     GpuProgram.blit(gl, output);

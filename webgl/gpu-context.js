@@ -86,8 +86,7 @@ export class GpuContext {
       throw new Error('Cannot get WebGL context');
     }
 
-    console.log('WebGL context v' + gl.VERSION, 'available at window.gl');
-    window.gl = gl;
+    console.log('WebGL context v' + gl.VERSION);
 
     if (isWebGL2)
       gl.getExtension('EXT_color_buffer_float');
@@ -137,6 +136,8 @@ export class GpuContext {
       0, 1, 2, // LB-LT-RT
       0, 2, 3, // LB-RT-RB
     ]);
+
+    let gl = this.gl;
 
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);

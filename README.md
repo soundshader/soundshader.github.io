@@ -1,6 +1,6 @@
 # The AutoCorrelation Function
 
-> _[Autocorrelation](https://pages.mtu.edu/~suits/autocorrelation.htm) is used to compare a signal with a time-delayed version of itself. If a signal is periodic, then the signal will be perfectly correlated with a version of itself if the time-delay is an integer number of periods. That fact, along with related experiments, has implicated autocorrelation as a potentially important part of signal processing in human hearing._
+> _[Autocorrelation](https://pages.mtu.edu/~suits/autocorrelation.html) is used to compare a signal with a time-delayed version of itself. If a signal is periodic, then the signal will be perfectly correlated with a version of itself if the time-delay is an integer number of periods. That fact, along with related experiments, has implicated autocorrelation as a potentially important part of signal processing in human hearing._
 
  ACF is a simple method to visualize music that produces surprisingly good results. Perhaps the most unexpected property of ACF is that it accurately transfers the subjective "harmony level" from music to images. It's almost an unreasonable property, if you think about it.
 
@@ -69,11 +69,13 @@ Music is a temporal ornament. There are many types of ornaments, e.g. the 17 typ
 
 Putting these observations together we naturally arrive with the ACF idea.
 
+# Extending it to 3D
+
 In fact, this idea can be extended to 3D-space. ACF correlates a wave with a delayed copy of itself: `ACF[p] = w[0..N] * w[p..N+p]`. Nothing stops us from computing a [tri-correlation](https://en.wikipedia.org/wiki/Triple_correlation):
 
 `ACF3[p, q] = w[0..N] * w[p..N+p] * w[q..N+q]`
 
-The `ACF3` function will be `N` periodic over both its parameters and thus can be naturally mapped to a sphere: `p` will become longitude and `q` - latitude. A series of `ACF3` spheres can be combined together the same way and we'd get a 3D equivalent of the images above. I don't know what the result would look like, but rendering it would need a really good GPU, as just storing the `ACF3` buffer would need about `S(N)` = `N^2*T*fps*sizeof(float)` = `8192^2*15*60*4` = 230 GB of GPU memory (well, 57 GB if we notice that ACF3 is an even function). On top of that, a raymarching algorithm would need to cast rays thru this spherical cloud, which is about `T(N)` = `O(N^3*fps)` ~ 245 TFlops (don't forget that interpolation of ACF3 values along the ray isn't free). That's on the edge of the $500K [DGX-2](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/dgx-1/dgx-2-datasheet-us-nvidia-955420-r2-web-new.pdf)'s ability.
+The `ACF3` function will be `N` periodic over both its parameters and thus can be naturally mapped to a sphere: `p` will become longitude and `q` - latitude. A series of `ACF3` spheres can be combined together the same way and we'd get a 3D equivalent of the images above. I don't know what the result would look like, but rendering it would need a really good GPU, as just storing the `ACF3` buffer would need about `S(N)` = `N^2*T*fps*sizeof(float)` = `8192^2*15*60*4` = 230 GB of GPU memory (well, 25 GB if we notice symmetries of `ACF3`). On top of that, a raymarching algorithm would need to cast rays thru this spherical cloud, which is about `T(N)` = `O(N^3*fps)` ~ 245 TFlops (don't forget that interpolation of ACF3 values along the ray isn't free). That's on the edge of the $500K [DGX-2](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/dgx-1/dgx-2-datasheet-us-nvidia-955420-r2-web-new.pdf)'s ability.
 
 # Questions?
 

@@ -1,5 +1,6 @@
 import * as vargs from './vargs.js';
 import { AudioController } from './audio/controller.js';
+import { CwtController } from './audio/cwt-controller.js';
 
 let btnUpload = document.querySelector('#upload');
 let btnMic = document.querySelector('#mic');
@@ -13,7 +14,10 @@ let keyboardHandlers = {};
 
 let config = {
   size: vargs.SIZE,
-  audio: true, // getUserMedia
+  audio: {
+    channelCount: 1,
+    sampleRate: vargs.SAMPLE_RATE * 1e3 | 0,
+  },
 };
 
 window.onload = () => void main();
@@ -30,6 +34,9 @@ function main() {
 
 function setRecordingHandler() {
   let videoStream, recorder, chunks;
+
+  if (!vargs.REC_FRAMERATE)
+    btnRec.style.display = 'none';
 
   btnRec.onclick = async () => {
     if (recorder) {
@@ -137,7 +144,11 @@ function getAudioController() {
   if (audioController)
     return audioController;
 
-  audioController = new AudioController(canvas, {
+  let ctor = vargs.SHADER == 'cwt' ?
+    CwtController :
+    AudioController;
+
+  audioController = new ctor(canvas, {
     fftSize: config.size * 2,
     stats: divStats,
   });

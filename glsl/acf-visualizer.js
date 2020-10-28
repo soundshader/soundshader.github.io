@@ -17,9 +17,9 @@ export class GpuAcfVisualizerProgram {
     let aa = Math.log2(size / canvasSize);
 
     console.log('ACF initializing with config:',
-      'wave =', waveformLen,
-      'fft =', size,
-      'canvas =', canvasSize);
+      'wave=', waveformLen,
+      'fft=', size,
+      'img=', canvasSize);
 
     if (aa != Math.floor(aa))
       throw new Error('ACF MSAA 2^N != ' + aa);
@@ -42,43 +42,47 @@ export class GpuAcfVisualizerProgram {
   }
 
   exec({ uWaveFormRaw, uMousePos }, output) {
-    this.gpuACF.exec({
-      uWaveFormRaw,
-    }, this.acfBuffer);
+    if (uWaveFormRaw) {
+      this.gpuACF.exec({
+        uWaveFormRaw,
+      }, this.acfBuffer);
 
-    this.downsampler2.exec({
-      uImage: this.acfBuffer,
-    }, this.acfBufferAA);
+      this.downsampler2.exec({
+        uImage: this.acfBuffer,
+      }, this.acfBufferAA);
 
-    [this.acfImage1, this.acfImage2] =
-      [this.acfImage2, this.acfImage1];
+      [this.acfImage1, this.acfImage2] =
+        [this.acfImage2, this.acfImage1];
 
-    this.recorder.exec({
-      uImage: this.acfImage1,
-      uSlice: this.acfBufferAA,
-    }, this.acfImage2);
+      this.recorder.exec({
+        uImage: this.acfImage1,
+        uSlice: this.acfBufferAA,
+      }, this.acfImage2);
+    }
 
-    let [mx, my] = uMousePos;
+    if (output != GpuFrameBuffer.DUMMY) {
+      let [mx, my] = uMousePos;
 
-    this.heightMap.exec({
-      uZoom: 1.0 + Math.exp(my * 10.0),
-      uExp: Math.exp(mx * vargs.ACF_EXP),
-      uACF: this.acfImage2,
-    });
+      this.heightMap.exec({
+        uZoom: 1.0 + Math.exp(my * 10.0),
+        uExp: Math.exp(mx * vargs.ACF_EXP),
+        uACF: this.acfImage2,
+      });
 
-    this.stats.exec({
-      uData: this.heightMap.output,
-    }, this.heightMapStats);
+      this.stats.exec({
+        uData: this.heightMap.output,
+      }, this.heightMapStats);
 
-    this.downsampler1.exec({
-      uImage: this.heightMap.output,
-    }, this.heightMapAA);
+      this.downsampler1.exec({
+        uImage: this.heightMap.output,
+      }, this.heightMapAA);
 
-    this.colorizer.exec({
-      uMX: mx * 0.5 + 0.5,
-      uHeightMap: this.heightMapAA,
-      uHeightMapStats: this.heightMapStats,
-    }, output);
+      this.colorizer.exec({
+        uMX: mx * 0.5 + 0.5,
+        uHeightMap: this.heightMapAA,
+        uHeightMapStats: this.heightMapStats,
+      }, output);
+    }
   }
 }
 
@@ -375,6 +379,32 @@ class GpuColorizer extends GpuTransformProgram {
   }
 }
 
+class GpuDownsampler1x2 extends GpuTransformProgram {
+  constructor(webgl) {
+    super(webgl, {
+      fshader: `
+        in vec2 v;
+        in vec2 vTex;
+
+        uniform sampler2D uImage;
+
+        vec4 rgba(vec2 vTex) {
+          return texture(uImage, vTex);
+        }
+
+        void main () {
+          float dy = 0.5 / float(textureSize(uImage, 0).y);
+
+          vec4 u1 = rgba(vTex - dy);
+          vec4 u2 = rgba(vTex + dy);
+
+          v_FragColor = 0.5 * (u1 + u2);
+        }
+      `,
+    });
+  }
+}
+
 class GpuDownsampler2x2 extends GpuTransformProgram {
   constructor(webgl) {
     super(webgl, {
@@ -407,7 +437,9 @@ class GpuDownsampler2x2 extends GpuTransformProgram {
 class GpuDownsampler {
   constructor(webgl, { width, height, channels, aa }) {
     this.aa = aa;
-    this.shader = new GpuDownsampler2x2(webgl);
+    this.shader = width == 1 ?
+      new GpuDownsampler1x2(webgl) :
+      new GpuDownsampler2x2(webgl);
     this.copy = new GpuTransformProgram(webgl);
     this.buffers = [];
 
