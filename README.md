@@ -8,9 +8,9 @@
 
 Female vocal         | David Parsons        | Vivaldi                 | a bird
 -------------------- | -------------------- | ----------------------- | ---
-![](pics/song-2.png) | ![](pics/bowl-3.png) | ![](pics/vivaldi-1.png) | ![](pics/bird-2.png)
+![](pics/song-2.jpg) | ![](pics/bowl-3.jpg) | ![](pics/vivaldi-1.jpg) | ![](pics/bird-2.jpg)
 
-More examples: [soundshader.github.io/gallery](https://soundshader.github.io/gallery/)
+More examples: [soundshader.github.io/gallery](https://soundshader.github.io/gallery/) (beware of large images).
 
 Live demo: [soundshader.github.io](https://soundshader.github.io/)
 
@@ -45,7 +45,7 @@ ACF is a periodic and even function and so it can be naturally rendered in polar
 
 conventional music    | a bird song
 --------------------- | ---------------------
-![](pics/acf-c-1.png) | ![](pics/acf-c-3.png)
+![](pics/acf-c-1.jpg) | ![](pics/acf-c-3.jpg)
 
 Looking at the first example, we can tell that there are 5 prominent peaks in a 20 ms sound sample, which corresponds to 250 Hz. This means that our ears would necesserarily perceive this sound as a 250 Hz tone, regardless of what its spectrogram says. If it was a pure 250 Hz tone, we'd see perfectly round shapes of the `r = cos(250Hz * t)` line, but it's not the case here: we see that the 5 peaks are modulated with small wavelets: there is one big wavelet in the middle (which consists of 3 smaller wavelets) and 4 smaller wavelets. Our ears would hear the big wavelet as the 2nd harmonic of the 250 Hz tone (i.e. it would be a 500 Hz tone with a smaller amplitude) and the 4 small wavelets as the 5th harmonic (1000 Hz) at barely discernible volume. In addition to that, the 500 Hz harmonic is also modulated by the 3 tiny wavelets, which means we'd hear a 1500 Hz tone, almost inaudible. We can say all this without even looking at the spectrogram or hearing the sound.
 
@@ -55,7 +55,7 @@ ACF drops the phase component. However the phase can be extracted from the first
 
 conventional music    | a bird song
 --------------------- | ---------------------
-![](pics/phase-1.png) | ![](pics/phase-3.png)
+![](pics/phase-1.jpg) | ![](pics/phase-3.jpg)
 
 I couldn't find a visually appealing way to incorporate these FFT phase colors into ACF images. But I don't think it's even necessary: sampling ACF with an overlap effectively captures the phase.
 
