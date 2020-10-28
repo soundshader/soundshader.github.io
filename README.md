@@ -79,7 +79,7 @@ The `ACF3` function will be `N` periodic over both its parameters and thus can b
 
 # Questions?
 
-Open an issue on github or shoot me a email: ssgh@aikh.org
+Open an issue on github or shoot me a email at ssgh@aikh.org
 
 # License
 
