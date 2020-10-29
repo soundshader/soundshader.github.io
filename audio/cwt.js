@@ -1,3 +1,4 @@
+import * as log from '../log.js';
 import * as vargs from '../vargs.js';
 import { FFT } from "./fft.js";
 import { GpuContext } from '../webgl/gpu-context.js';
@@ -5,7 +6,7 @@ import { GpuContext } from '../webgl/gpu-context.js';
 // Fast wavelet transform.
 export class CWT {
   constructor(size, { context, canvas, stats }) {
-    console.log('Fast Wavelet Transform');
+    log.i('Fast Wavelet Transform');
     this.audioCtx = context;
     this.canvas = canvas;
     this.stats = stats;
@@ -14,9 +15,9 @@ export class CWT {
   }
 
   async init(audioFile) {
-    console.log('Reading audio file:', (audioFile.size / 1e6).toFixed(1), 'MB');
+    log.i('Reading audio file:', (audioFile.size / 1e6).toFixed(1), 'MB');
     let audioBytes = await audioFile.arrayBuffer();
-    console.log('Decoding audio data...');
+    log.i('Decoding audio data...');
     this.audioBuffer = await this.audioCtx.decodeAudioData(audioBytes);
     this.audioSamples = this.audioBuffer.getChannelData(0);
     this.info(this.audioBuffer);
@@ -43,7 +44,7 @@ export class CWT {
   }
 
   info(b) {
-    console.log('Decoded audio:',
+    log.i('Decoded audio:',
       b.length.toExponential(1), 'samples',
       'x', b.numberOfChannels, 'channels',
       '@', (b.sampleRate / 1e3).toFixed(1), 'kHz',
@@ -65,7 +66,7 @@ export class CWT {
       f2s(this.f_min) + '..' + f2s(this.f_max),
     ].join(', ');
 
-    console.log('Rendering a frame:', info);
+    log.i('Rendering a frame:', info);
     this.stats.textContent = info;
     this.rerender = false;
     this.initAudioFrame();
@@ -139,16 +140,16 @@ export class CWT {
           break;
         case 'ArrowUp':
           this.m_periods *= 1.1;
-          console.log('m = ' + this.m_periods);
+          log.i('m = ' + this.m_periods);
           this.render();
           break;
         case 'ArrowDown':
           this.m_periods /= 1.1;
-          console.log('m = ' + this.m_periods);
+          log.i('m = ' + this.m_periods);
           this.render();
           break;
         default:
-          console.log('Unhandled key:', e.key);
+          log.i('Unhandled key:', e.key);
       }
     });
   }
@@ -161,7 +162,7 @@ export class CWT {
     let dy = y2 - y1;
 
     if (dx < 0.01 || dy < 0.01) {
-      console.log('The selected area is too small');
+      log.i('The selected area is too small');
       return;
     }
 
@@ -255,7 +256,7 @@ export class CWT {
     //  DFT[X ** Y] = DFT[X] * DFT[Y]
     //
     // Where ** is convolution and * is the dot product.    
-    // console.log('Computing FFT of input signal and wavelet function');
+    // log.i('Computing FFT of input signal and wavelet function');
     FFT.dot(this.signal_fft, this.wavelet_fft, this.fft_product);
     this.fft.inverse(this.fft_product, this.convolution);
     return FFT.abs(this.convolution, res);
@@ -269,7 +270,7 @@ export class CWT {
     }
 
     if (!this.fft || this.fft.size != size) {
-      console.log('Re-initiailzing FFT:', size);
+      log.i('Re-initiailzing FFT:', size);
       this.fft = new FFT(size, { webgl: this.webgl });
     }
   }
@@ -292,13 +293,13 @@ export class CWT {
     let signal = getPaddedSlice(this.audioSamples,
       padded_base, padded_base + padded_size);
 
-    console.log('Running FFT over', signal.length, 'audio samples =',
+    log.i('Running FFT over', signal.length, 'audio samples =',
       (signal.length / this.audioCtx.sampleRate).toFixed(2), 'sec of audio');
     this.initFFT(signal.length);
     let time = Date.now();
     this.signal_fft = new Float32Array(signal.length * 2);
     this.fft.transform(FFT.expand(signal), this.signal_fft);
-    console.log('FFT done in', Date.now() - time, 'ms');
+    log.i('FFT done in', Date.now() - time, 'ms');
 
     let n = this.signal_fft.length;
     this.wavelet_fft = new Float32Array(n);

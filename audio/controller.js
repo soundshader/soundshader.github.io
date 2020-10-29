@@ -1,3 +1,4 @@
+import * as log from '../log.js';
 import * as vargs from '../vargs.js';
 import { GpuContext } from "../webgl/gpu-context.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
@@ -107,7 +108,7 @@ export class AudioController {
     this.source = this.audioCtx.createMediaStreamSource(this.stream);
     this.source.connect(this.analyser);
 
-    console.log('Input sound:', this.waveform.length, 'samples/batch',
+    log.i('Input sound:', this.waveform.length, 'samples/batch',
       '@', this.audioCtx.sampleRate, 'Hz',
       'x', this.source.channelCount, 'channels',
       (audioEl ? audioEl.duration : 0) | 0, 'sec');
@@ -125,7 +126,7 @@ export class AudioController {
     this.stream = null;
     this.source = null;
     this.started = false;
-    console.log('Audio stopped');
+    log.i('Audio stopped');
   }
 
   pause() {
@@ -135,7 +136,7 @@ export class AudioController {
     cancelAnimationFrame(this.animationId);
     this.timerId = 0;
     this.animationId = 0;
-    console.log('Audio paused');
+    log.i('Audio paused');
   }
 
   resume() {
@@ -176,7 +177,7 @@ export class AudioController {
     };
 
     this.running = true;
-    console.log('Audio resumed');
+    log.i('Audio resumed');
 
     animate();
 

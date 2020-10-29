@@ -1,8 +1,10 @@
 import * as vargs from './vargs.js';
 import { AudioController } from './audio/controller.js';
 import { CwtController } from './audio/cwt-controller.js';
+import * as log from './log.js';
 
 let btnUpload = document.querySelector('#upload');
+let btnLogs = document.querySelector('#log');
 let btnMic = document.querySelector('#mic');
 let btnRec = document.querySelector('#rec');
 let divStats = document.querySelector('#stats');
@@ -25,11 +27,19 @@ window.onload = () => void main();
 function main() {
   canvas.width = vargs.IMAGE_SIZE;
   canvas.height = vargs.IMAGE_SIZE;
-  console.log('canvas size:', vargs.IMAGE_SIZE);
+  log.i('canvas size:', vargs.IMAGE_SIZE);
   setKeyboardHandlers();
   setMouseHandlers();
   setRecordingHandler();
+  setLogsHandler();
   divStats.textContent = 'Select a mp3 file or use mic.';
+}
+
+function setLogsHandler() {
+  if (!vargs.SHOW_LOGS)
+    btnLogs.style.display = 'none';
+  else
+    btnLogs.onclick = () => log.download();
 }
 
 function setRecordingHandler() {
@@ -40,21 +50,21 @@ function setRecordingHandler() {
 
   btnRec.onclick = async () => {
     if (recorder) {
-      console.log('Saving recorded media');
+      log.i('Saving recorded media');
       videoStream.getTracks().map(t => t.stop());
       videoStream = null;
 
       recorder.onstop = () => {
         let mime = recorder.mimeType;
         let size = chunks.reduce((s, b) => s + b.size, 0);
-        console.log('Prepairing a media blob', mime, 'with',
+        log.i('Prepairing a media blob', mime, 'with',
           chunks.length, 'chunks', size / 2 ** 10 | 0, 'KB total');
         let blob = new Blob(chunks, { type: mime })
         let url = URL.createObjectURL(blob);
         chunks = [];
         recorder = null;
 
-        console.log('Downloading the media blob at', url);
+        log.i('Downloading the media blob at', url);
         let a = document.createElement('a');
         let filename = new Date().toJSON()
           .replace(/\..+$/, '')
@@ -66,13 +76,13 @@ function setRecordingHandler() {
 
       recorder.stop();
     } else {
-      console.log('Prepairing video and audio streams for recording');
+      log.i('Prepairing video and audio streams for recording');
       let stream = new MediaStream();
       videoStream = canvas.captureStream(vargs.REC_FRAMERATE);
       videoStream.getTracks().map(t => stream.addTrack(t));
       audioStream.getTracks().map(t => stream.addTrack(t));
 
-      console.log('Starting recording a stream with',
+      log.i('Starting recording a stream with',
         stream.getTracks().length, 'media tracks');
       recorder = new MediaRecorder(stream);
       chunks = [];
@@ -89,7 +99,7 @@ function setMouseHandlers() {
     await controller.stop();
     audioStream = await navigator.mediaDevices.getUserMedia(
       { audio: config.audio });
-    console.log('Captured microphone stream.');
+    log.i('Captured microphone stream.');
     await controller.start(audioStream);
   };
 
@@ -98,7 +108,7 @@ function setMouseHandlers() {
 
     let x = e.offsetX / canvas.clientWidth - 0.5;
     let y = 0.5 - e.offsetY / canvas.clientHeight;
-    console.log('canvas click:', x.toFixed(3), y.toFixed(3));
+    log.i('canvas click:', x.toFixed(3), y.toFixed(3));
 
     let controller = getAudioController();
 
@@ -140,7 +150,7 @@ function setKeyboardHandler(key, description, handler) {
     throw new Error('Key already in use: ' + key);
 
   keyboardHandlers[key] = handler;
-  console.log(key, '-', description);
+  log.i(key, '-', description);
 }
 
 function getAudioController() {
@@ -161,7 +171,7 @@ function getAudioController() {
 }
 
 async function selectAudioFile() {
-  console.log('Creating an <input> to pick a file');
+  log.i('Creating an <input> to pick a file');
   let input = document.createElement('input');
   input.type = 'file';
   input.accept = 'audio/mpeg; audio/wav; audio/webm';
@@ -175,14 +185,14 @@ async function selectAudioFile() {
   });
 
   if (!file) return {};
-  console.log('Selected file:', file.type,
+  log.i('Selected file:', file.type,
     file.size / 2 ** 10 | 0, 'KB', file.name);
   document.title = file.name;
 
   let url = URL.createObjectURL(file);
   audio.src = url;
   audio.playbackRate = vargs.PLAYBACK_RATE;
-  console.log('audio.src =', url,
+  log.i('audio.src =', url,
     'playbackRate =', audio.playbackRate);
 
   await new Promise(resolve => {
@@ -190,7 +200,7 @@ async function selectAudioFile() {
       () => resolve();
   });
 
-  console.log('Capturing audio stream');
+  log.i('Capturing audio stream');
   audioStream = audio.captureStream ?
     audio.captureStream() :
     audio.mozCaptureStream();

@@ -1,3 +1,5 @@
+import * as log from '../log.js';
+
 const SHADER_PREFACE = `
   #version 300 es
   precision highp float;
@@ -109,6 +111,7 @@ export class GpuProgram {
     console.log(source);
     console.groupEnd();
 
+    log.e(message);
     throw new Error(message);
   }
 }

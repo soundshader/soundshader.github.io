@@ -1,3 +1,4 @@
+import * as log from '../log.js';
 import { GpuFrameBuffer } from "./framebuffer.js";
 import { GpuProgram } from "./gpu-program.js";
 import { USE_ALPHA_CHANNEL } from "../vargs.js";
@@ -62,7 +63,7 @@ export class GpuContext {
 
   init() {
     let canvas = this.canvas;
-    console.log('Initializing WebGL');
+    log.i('Initializing WebGL');
 
     let params = {
       alpha: USE_ALPHA_CHANNEL,
@@ -76,17 +77,17 @@ export class GpuContext {
     let isWebGL2 = !!gl;
 
     if (!isWebGL2) {
-      console.warn('WebGL 2.0 unavailable');
+      log.w('WebGL 2.0 unavailable');
       gl = canvas.getContext('webgl', params) ||
         canvas.getContext('experimental-webgl', params);
     }
 
     if (!gl) {
-      console.warn('getContext("webgl") blocked by getContext("2d")?');
+      log.w('getContext("webgl") blocked by getContext("2d")?');
       throw new Error('Cannot get WebGL context');
     }
 
-    console.log('WebGL context v' + gl.VERSION);
+    log.i('WebGL context v' + gl.VERSION);
 
     if (isWebGL2)
       gl.getExtension('EXT_color_buffer_float');

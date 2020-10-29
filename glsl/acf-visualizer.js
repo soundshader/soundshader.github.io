@@ -1,3 +1,4 @@
+import * as log from '../log.js';
 import { FFT } from "../audio/fft.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
@@ -16,7 +17,7 @@ export class GpuAcfVisualizerProgram {
     let size = Math.min(waveformLen, vargs.ACF_MAX_SIZE);
     let aa = Math.log2(size / canvasSize);
 
-    console.log('ACF initializing with config:',
+    log.i('ACF initializing with config:',
       'wave=', waveformLen,
       'fft=', size,
       'img=', canvasSize);

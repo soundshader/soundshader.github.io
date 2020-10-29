@@ -23,6 +23,7 @@ export const FFT_GL = numarg('fft.gl', 0);
 export const FFT_TIME = numarg('fft.time', 0);
 export const FFT_LOG_SCALE = numarg('fft.log', 1);
 export const USE_ALPHA_CHANNEL = numarg('alpha', 0);
+export const SHOW_LOGS = numarg('logs', 0);
 
 console.groupEnd();
 
