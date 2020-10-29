@@ -113,11 +113,10 @@ function setMouseHandlers() {
   };
 
   btnUpload.onclick = async () => {
-    let file = await selectAudioFile();
-    if (!file) return;
     let controller = getAudioController();
     await controller.stop();
-    await controller.start(audioStream, file, audio);
+    let file = await selectAudioFile();
+    file && await controller.start(audioStream, file, audio);
   };
 }
 
@@ -192,6 +191,8 @@ async function selectAudioFile() {
   });
 
   console.log('Capturing audio stream');
-  audioStream = audio.captureStream();
+  audioStream = audio.captureStream ?
+    audio.captureStream() :
+    audio.mozCaptureStream();
   return file;
 }

@@ -1,11 +1,13 @@
 let args = new URLSearchParams(location.search);
 
+console.groupCollapsed('URL config args');
+
 export const SIZE = numarg('n', 2048);
 export const SHADER = strarg('s', 'acf');
-export const SHADER_FPS = numarg('fps', 120);
+export const SHADER_FPS = numarg('fps', 60);
 export const SAMPLE_RATE = numarg('sr', 44.1);
 export const PLAYBACK_RATE = numarg('pbr', 1.0);
-export const IMAGE_SIZE = numarg('is', 1024);
+export const IMAGE_SIZE = numarg('img', 1024);
 export const USE_MOUSE = numarg('mouse', 1);
 export const ACF_COLOR_SCHEME = numarg('acf.cs', 2);
 export const ACF_EXP = numarg('acf.exp', 0);
@@ -21,6 +23,8 @@ export const FFT_GL = numarg('fft.gl', 0);
 export const FFT_TIME = numarg('fft.time', 0);
 export const FFT_LOG_SCALE = numarg('fft.log', 1);
 export const USE_ALPHA_CHANNEL = numarg('alpha', 0);
+
+console.groupEnd();
 
 function strarg(name, defval = '', regex = null) {
   let value = args.get(name) || defval;

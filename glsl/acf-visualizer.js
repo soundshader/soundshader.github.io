@@ -389,7 +389,7 @@ class GpuColorizer extends GpuTransformProgram {
           vec3 rgb = hcolor_${vargs.ACF_COLOR_SCHEME}(h);
           vec4 rgba = vec4(rgb, 1.0);
           if (CIRCLE && !uFlat)
-            rgba *= 1.0 - smoothstep(R_MAX, 1.0, r);
+            rgba *= smoothstep(1.0, R_MAX, r);
           return rgba;
         }
 

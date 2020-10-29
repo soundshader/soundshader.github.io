@@ -118,15 +118,24 @@ export class AudioController {
 
   async stop() {
     if (!this.started) return;
-    this.audioEl && this.audioEl.pause();
+    this.pause();
     this.source.disconnect();
     let tracks = this.stream.getTracks();
     tracks.map(t => t.stop());
     this.stream = null;
     this.source = null;
-    this.running = false;
     this.started = false;
     console.log('Audio stopped');
+  }
+
+  pause() {
+    this.running = false;
+    this.audioEl && this.audioEl.pause();
+    clearInterval(this.timerId);
+    cancelAnimationFrame(this.animationId);
+    this.timerId = 0;
+    this.animationId = 0;
+    console.log('Audio paused');
   }
 
   resume() {
@@ -172,16 +181,6 @@ export class AudioController {
     animate();
 
     this.audioEl && this.audioEl.play();
-  }
-
-  pause() {
-    this.running = false;
-    this.audioEl && this.audioEl.pause();
-    clearInterval(this.timerId);
-    cancelAnimationFrame(this.animationId);
-    this.timerId = 0;
-    this.animationId = 0;
-    console.log('Audio paused');
   }
 
   captureFrame() {
