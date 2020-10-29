@@ -2,11 +2,12 @@
 
 Different images use slightly different coloring schemes. Usually, linear mapping of ACF values to color brightness produces the best results, but in a few cases I had to use a more sophisticated scheme to capture a mix of too low and too high ACF values, which often happens in loud club music. The only reason a coloring scheme is needed at all is the very limited brightness range of LCD monitors: those generally can't display pixels that differ in brightness 10,000 times.
 
+ A | B  | C  | D
+-- | -- | -- | --
 ![](../pics/abora-1.png) | ![](../pics/bowl-3.png) | ![](../pics/bowl-4.png) | ![](../pics/wren-phase.jpg)
--- | -- | -- | --
 ![](../pics/song-1.png) | ![](../pics/song-2.png) | ![](../pics/vivaldi-1.png) | ![](../pics/bird-1.png)
--- | -- | -- | --
 ![](../pics/bird-2.png) | ![](../pics/bowl-1.png) | ![](../pics/bowl-2.png)    | ![](../pics/bird-3.png)
+![](../pics/accord.png) | ![](../pics/allegro.jpg) | |
 
 # Some ACF videos
 

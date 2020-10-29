@@ -69,7 +69,7 @@ Music is a temporal ornament. There are many types of ornaments, e.g. the 17 typ
 
 Putting these observations together we naturally arrive with the ACF idea.
 
-# Extending it to 3D
+# Taking it to 3D
 
 In fact, this idea can be extended to 3D-space. ACF correlates a wave with a delayed copy of itself: `ACF[p] = w[0..N] * w[p..N+p]`. Nothing stops us from computing a [tri-correlation](https://en.wikipedia.org/wiki/Triple_correlation):
 

@@ -24,6 +24,8 @@ export class GpuAcfVisualizerProgram {
     if (aa != Math.floor(aa))
       throw new Error('ACF MSAA 2^N != ' + aa);
 
+    this.flat = !!vargs.ACF_COORDS;
+
     this.gpuACF = new GpuACF(webgl, { size: waveformLen });
     this.recorder = new GpuRecorder(webgl, { size });
     this.heightMap = new GpuHeightMapProgram(webgl, { size });
@@ -64,6 +66,7 @@ export class GpuAcfVisualizerProgram {
       let [mx, my] = uMousePos;
 
       this.heightMap.exec({
+        uFlat: this.flat,
         uZoom: 1.0 + Math.exp(my * 10.0),
         uExp: Math.exp(mx * vargs.ACF_EXP),
         uACF: this.acfImage2,
@@ -78,6 +81,7 @@ export class GpuAcfVisualizerProgram {
       }, this.heightMapAA);
 
       this.colorizer.exec({
+        uFlat: this.flat,
         uMX: mx * 0.5 + 0.5,
         uHeightMap: this.heightMapAA,
         uHeightMapStats: this.heightMapStats,
@@ -179,16 +183,31 @@ class GpuHeightMapProgram extends GpuTransformProgram {
         uniform sampler2D uACF;
         uniform float uZoom;
         uniform float uExp;
+        uniform bool uFlat;
 
         const float N = float(${size});
         const float PI = ${Math.PI};
 
         ${shaderUtils}
-
         ${textureUtils}
 
         float h_acf(vec2 ta) {
           return textureSmooth(uACF, ta).x;
+        }
+
+        float h_acf_msaa(float t, float a0, float s, int aa) {
+          if (aa < 2)
+            return h_acf(vec2(t, a0));
+
+          float sum = 0.0;
+
+          for (int j = 0; j < aa; j++) {
+            float a = mix(a0 - s, a0 + s,
+              (0.5 + float(j))/float(aa));
+            sum += h_acf(vec2(t, a));
+          }
+
+          return sum / float(aa);
         }
 
         float t_grad(vec2 ta) {
@@ -205,28 +224,37 @@ class GpuHeightMapProgram extends GpuTransformProgram {
           return (h2 - h1) * 0.5 * N;
         }
 
-        vec4 fetch_0() {
+        float fetch_0() {
           float r = length(v);
-          if (r > 0.99) return vec4(0.0);
-
           float t = 1.0 - pow(r, uExp) / uZoom;
-          if (t < 0.5 / N) return vec4(0.0);
-          
-          float a = -0.25 + 0.5 * atan2(v.y, v.x) / PI;
-          vec2 ta = vec2(t, a);
-          return vec4(h_acf(ta), 0.0, 0.0, 0.0);
+
+          if (r < 0.5/N || r > 1.0 - 0.5/N || t < 0.5/N)
+            return 0.0;
+
+          float arg = atan2(v.y, v.x);
+          float a = -0.25 + 0.5 * arg / PI;
+          return h_acf(vec2(t, a));
+
+          /* float s = 0.5 / N / PI / t;
+          float q = rand(dot(vTex, vec2(1.2918, 0.9821)/PI)) - 0.5;
+          return h_acf_msaa(t, a - s * q * 0.1, s,
+            int(clamp(ceil(1.0 / PI / t), 1.0, 10.0))); */
         }
 
-        vec4 fetch_1() {
+        float fetch_1() {
           float r = 1.0 - vTex.y;
+          float t = 1.0 - pow(r, uExp) / uZoom;
+
+          if (r < 0.5/N || r > 1.0 - 0.5/N || t < 0.5/N)
+            return 0.0;
+
           float a = vTex.x - 0.5;
-          float t = 1.0 - r / uZoom;
-          if (t < 0.5 / N) return vec4(0.0);
-          return vec4(h_acf(vec2(t, a)), 0.0, 0.0, 0.0);
+          return h_acf(vec2(t, a));
         }
 
         void main () {
-          v_FragColor = fetch_${vargs.ACF_COORDS}();
+          float h = uFlat ? fetch_1() : fetch_0();
+          v_FragColor = vec4(h, 0.0, 0.0, 0.0);
         }
       `,
     });
@@ -262,8 +290,7 @@ class GpuColorizer extends GpuTransformProgram {
         in vec2 vTex;
 
         const float N = ${size}.0;
-        const float R_MAX = 0.75;
-        const float R_GAIN = 1.5;
+        const float R_MAX = 0.9;
         const float N_SIGMA = float(${sigma});
         const vec3 COLOR_1 = vec3(4.0, 2.0, 1.0);
         const vec3 COLOR_2 = vec3(1.0, 2.0, 4.0);
@@ -273,6 +300,7 @@ class GpuColorizer extends GpuTransformProgram {
         const vec2 dy = vec2(0.0, 1.0) / N;
 
         uniform float uMX;
+        uniform bool uFlat;
         uniform sampler2D uHeightMap;
         uniform sampler2D uHeightMapStats;
 
@@ -309,12 +337,6 @@ class GpuColorizer extends GpuTransformProgram {
           vec3 g3 = grad(vTex - dy);
           vec3 g4 = grad(vTex + dy);
           return 0.25 * (g1 + g2 + g3 + g4);
-        }
-
-        float fadeoff(float r) {
-          float r0 = 0.5 * (1.0 + R_MAX);
-          float dr = 0.5 * (1.0 - R_MAX);
-          return 0.5 + 0.5 * gain((r0 - r) / dr, R_GAIN);
         }
 
         vec3 hcolor_1(float h) {
@@ -361,13 +383,13 @@ class GpuColorizer extends GpuTransformProgram {
 
         vec4 rgba(vec2 vTex) {
           float r = length(v);
-          if (r > 0.99 && CIRCLE)
+          if (r > 0.99 && CIRCLE && !uFlat)
             return vec4(0.0);
-
           float h = h_acf(vTex);
           vec3 rgb = hcolor_${vargs.ACF_COLOR_SCHEME}(h);
           vec4 rgba = vec4(rgb, 1.0);
-          if (CIRCLE) rgba *= fadeoff(r);
+          if (CIRCLE && !uFlat)
+            rgba *= 1.0 - smoothstep(R_MAX, 1.0, r);
           return rgba;
         }
 
@@ -388,17 +410,23 @@ class GpuDownsampler1x2 extends GpuTransformProgram {
 
         uniform sampler2D uImage;
 
-        vec4 rgba(vec2 vTex) {
-          return texture(uImage, vTex);
+        const float A = 1.0 / 6.0;
+        const float B = 4.0 / 6.0;
+        const float C = 1.0 / 6.0;
+
+        vec4 rgba(int i) {
+          return texelFetch(uImage, ivec2(0, i), 0);
         }
 
         void main () {
-          float dy = 0.5 / float(textureSize(uImage, 0).y);
+          int n = textureSize(uImage, 0).y;
+          int i = int(vTex.y * float(n) - 0.5);
 
-          vec4 u1 = rgba(vTex - dy);
-          vec4 u2 = rgba(vTex + dy);
+          vec4 a = A * rgba(i - 1);
+          vec4 b = B * rgba(i);
+          vec4 c = C / 6.0 * rgba(i + 1);
 
-          v_FragColor = 0.5 * (u1 + u2);
+          v_FragColor = a + b + c;
         }
       `,
     });
@@ -409,25 +437,41 @@ class GpuDownsampler2x2 extends GpuTransformProgram {
   constructor(webgl) {
     super(webgl, {
       fshader: `
-        in vec2 v;
         in vec2 vTex;
 
         uniform sampler2D uImage;
 
-        vec4 rgba(vec2 vTex) {
-          return texture(uImage, vTex);
+        const float A = 1.0 / 6.0;
+        const float B = 4.0 / 6.0;
+        const float C = 1.0 / 6.0;
+
+        const ivec2 dx = ivec2(1, 0);
+        const ivec2 dy = ivec2(0, 1);
+
+        vec4 rgba(ivec2 v) {
+          return texelFetch(uImage, v, 0);
+        }
+
+        vec4 xavg(ivec2 v) {
+          vec4 a = A * rgba(v - dx);
+          vec4 b = B * rgba(v);
+          vec4 c = C * rgba(v + dx);
+
+          return a + b + c;
+        }
+
+        vec4 yavg(ivec2 v) {
+          vec4 a = A * xavg(v - dy);
+          vec4 b = B * xavg(v);
+          vec4 c = C * xavg(v + dy);
+
+          return a + b + c;
         }
 
         void main () {
           ivec2 size = textureSize(uImage, 0);
-          vec2 d = vec2(0.5, 0.5) / vec2(size);
-
-          vec4 u1 = rgba(vTex - d.x - d.y);
-          vec4 u2 = rgba(vTex - d.x + d.y);
-          vec4 u3 = rgba(vTex + d.x + d.y);
-          vec4 u4 = rgba(vTex + d.x - d.y);
-
-          v_FragColor = 0.25 * (u1 + u2 + u3 + u4);
+          ivec2 v = ivec2(vTex * vec2(size) - 0.5);
+          v_FragColor = yavg(v);
         }
       `,
     });

@@ -2,6 +2,7 @@ import { GpuTransformProgram } from "../../../webgl/transform.js";
 import { shaderUtils } from "./basics.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { FFT } from "../audio/fft.js";
+import { FFT_TIME } from "../vargs.js";
 
 export class GpuSpectrogramProgram {
   constructor(webgl, { size, maxFreq, logScale = true }) {
@@ -54,7 +55,6 @@ export class GpuSpectrogramProgram {
       this.record(uWaveFormRaw);
 
     this.colorizer.exec({
-      uTimeStep: 1.0,
       uInput: this.buffer2,
       uMousePos,
       uTime,
@@ -74,7 +74,6 @@ class GpuColorizer extends GpuTransformProgram {
         uniform vec2 uMousePos;
         uniform float uTime;
         uniform float uMaxTime;
-        uniform float uTimeStep;
 
         const float N = float(${size});
         const float PI = ${Math.PI};
@@ -84,6 +83,7 @@ class GpuColorizer extends GpuTransformProgram {
         const float W_MIN = log2(MIN_AUDIBLE_FREQ / MAX_FREQ);
         const float W_MAX = log2(MAX_FREQ / MAX_FREQ);
         const bool LOG_SCALE = ${!!logScale};
+        const float TIMESTEP = float(${FFT_TIME});
 
         ${shaderUtils}
 
@@ -108,8 +108,8 @@ class GpuColorizer extends GpuTransformProgram {
         }
 
         vec3 getTimeLine(float x) {
-          if (uTimeStep == 0.0) return vec3(0.0);
-          float dt = uTimeStep / uMaxTime;
+          if (TIMESTEP == 0.0) return vec3(0.0);
+          float dt = TIMESTEP / uMaxTime;
           float t1 = x + uTime;
           float t0 = t1 - 1.0 / N;
           float val = mod(t1, dt) < mod(t0, dt) ?

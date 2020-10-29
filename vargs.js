@@ -6,7 +6,7 @@ export const SHADER_FPS = numarg('sfps', 50);
 export const SAMPLE_RATE = numarg('sr', 44.1);
 export const PLAYBACK_RATE = numarg('pbr', 1.0);
 export const IMAGE_SIZE = numarg('is', 1024);
-export const USE_MOUSE = numarg('mouse', 0);
+export const USE_MOUSE = numarg('mouse', 1);
 export const ACF_COLOR_SCHEME = numarg('acf.cs', 2);
 export const ACF_EXP = numarg('acf.exp', 0);
 export const ACF_MAX_SIZE = numarg('acf.max', 2048);
@@ -18,6 +18,7 @@ export const CWT_LEN = numarg('cwt.len', 17);
 export const CWT_N = numarg('cwt.3s', 30);
 export const CWT_GL = numarg('cwt.gl', 1);
 export const FFT_GL = numarg('fft.gl', 0);
+export const FFT_TIME = numarg('fft.time', 0);
 export const FFT_LOG_SCALE = numarg('fft.log', 1);
 export const USE_ALPHA_CHANNEL = numarg('alpha', 0);
 

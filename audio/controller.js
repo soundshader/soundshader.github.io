@@ -47,6 +47,11 @@ export class AudioController {
 
       this.mouseX = x * 2 - 1;
       this.mouseY = 1 - y * 2;
+
+      if (!this.running) {
+        requestAnimationFrame(() =>
+          this.drawFrame());
+      }
     };
   }
 
@@ -74,6 +79,13 @@ export class AudioController {
   switchAudioRenderer() {
     this.rendererId = (this.rendererId + 1)
       % this.renderers.length;
+  }
+
+  switchCoords() {
+    let node = this.renderers[this.rendererId];
+    node.flat = !node.flat;
+    requestAnimationFrame(() =>
+      this.drawFrame());
   }
 
   drawFrame(output = null) {

@@ -94,6 +94,8 @@ function setMouseHandlers() {
   };
 
   canvas.onclick = async e => {
+    if (e.which == 3) return; // right click
+
     let x = e.offsetX / canvas.clientWidth - 0.5;
     let y = 0.5 - e.offsetY / canvas.clientHeight;
     console.log('canvas click:', x.toFixed(3), y.toFixed(3));
@@ -128,6 +130,8 @@ function setKeyboardHandlers() {
 
   setKeyboardHandler('r', 'Switch sound shader.',
     () => getAudioController().switchAudioRenderer());
+  setKeyboardHandler('c', 'Switch coords.',
+    () => getAudioController().switchCoords());
 }
 
 function setKeyboardHandler(key, description, handler) {

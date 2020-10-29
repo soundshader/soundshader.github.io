@@ -89,12 +89,12 @@ export class GpuProgram {
     gl.compileShader(shader);
 
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
-      GpuProgram.reportError(shader, source2);
+      GpuProgram.reportError(gl, shader, source2);
 
     return shader;
   }
 
-  static reportError(shader, source) {
+  static reportError(gl, shader, source) {
     let log = gl.getShaderInfoLog(shader) || '';
     let [, col, row] = /^ERROR: (\d+):(\d+):/.exec(log) || [];
     let message = log.split('\n')[0];
