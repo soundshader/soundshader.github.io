@@ -1,8 +1,8 @@
 let args = new URLSearchParams(location.search);
 
-export const SIZE = numarg('n', 1024);
+export const SIZE = numarg('n', 2048);
 export const SHADER = strarg('s', 'acf');
-export const SHADER_FPS = numarg('sfps', 50);
+export const SHADER_FPS = numarg('fps', 120);
 export const SAMPLE_RATE = numarg('sr', 44.1);
 export const PLAYBACK_RATE = numarg('pbr', 1.0);
 export const IMAGE_SIZE = numarg('is', 1024);
