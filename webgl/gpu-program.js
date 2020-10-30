@@ -1,9 +1,9 @@
-import * as log from '../log.js';
+import * as vargs from '../vargs.js';
 
 const SHADER_PREFACE = `
   #version 300 es
-  precision highp float;
-  precision highp int;
+  precision ${vargs.FLOAT_PRECISION} float;
+  precision ${vargs.INT_PRECISION} int;
 `;
 
 const VSHADER_PREFACE = `
@@ -44,7 +44,8 @@ export class GpuProgram {
     return uniforms;
   }
 
-  static blit(gl, output) {
+  blit(output = null) {
+    let gl = this.gl;
     let w = output ? output.width : gl.drawingBufferWidth;
     let h = output ? output.height : gl.drawingBufferHeight;
     gl.viewport(0, 0, w, h);
@@ -108,7 +109,7 @@ export class GpuProgram {
     }
 
     console.groupCollapsed('Failed shader:');
-    console.log(source);
+    console.debug(source);
     console.groupEnd();
 
     log.e(message);

@@ -38,7 +38,7 @@ export class GpuTransformProgram {
     let gp = this.program;
     gp.bind();
     this.bindArgs(args);
-    GpuProgram.blit(gl, output);
+    gp.blit(output);
   }
 
   bindArgs(args) {

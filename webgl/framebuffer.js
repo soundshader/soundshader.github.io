@@ -1,9 +1,8 @@
 import * as log from '../log.js';
-
-const MAX_BUFFER_SIZE = 2 ** 29;
+import * as vargs from '../vargs.js';
 
 export class GpuFrameBuffer {
-  constructor(glctx, {
+  constructor(webgl, {
     size,
     width,
     height,
@@ -24,28 +23,14 @@ export class GpuFrameBuffer {
       height = size;
     }
 
-    let fb_size = width * height * channels * 4;
-    let spec = `${width}x${height}x${channels}`;
-    let note = `${spec} = ${fb_size >> 20} MB`;
-
-    if (fb_size > MAX_BUFFER_SIZE)
-      throw new Error(`FBO too large: ${note}`);
-
-    if (fb_size > 2 ** 23)
-      log.i(`Allocating a GPU buffer: ${note}`);
-
-    let args = glctx.prepareFrameBuffer(width, height, channels);
-
-    this.width = args.width;
-    this.height = args.height;
+    this.width = width;
+    this.height = height;
     this.channels = channels;
-    this.texture = args.texture;
-    this.fbo = args.fbo;
-    this.fmt = args.fmt;
-    this.type = args.type;
     this.source = source;
-    this.gl = glctx.gl;
+    this.webgl = webgl;
 
+    this.checkBufferSize();
+    this.prepareFBO();
     this.clear();
   }
 
@@ -57,7 +42,7 @@ export class GpuFrameBuffer {
     if (output.length != width * height * this.channels)
       throw new Error('Invalid CPU buffer length: ' + output.length);
 
-    let gl = this.gl;
+    let gl = this.webgl.gl;
 
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.fbo);
     gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
@@ -78,7 +63,7 @@ export class GpuFrameBuffer {
   }
 
   clear() {
-    let gl = this.gl;
+    let gl = this.webgl.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
       gl.TEXTURE_2D, this.texture, 0);
@@ -87,7 +72,7 @@ export class GpuFrameBuffer {
   }
 
   attach(id) {
-    let gl = this.gl;
+    let gl = this.webgl.gl;
     gl.activeTexture(gl.TEXTURE0 + id);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     if (this.source)
@@ -96,8 +81,8 @@ export class GpuFrameBuffer {
   }
 
   upload(source) {
-    let gl = this.gl;
-    let level = 0; // mipmap
+    let gl = this.webgl.gl;
+    let mipmap = 0;
     let border = 0;
     let offset = 0;
     let type = this.type;
@@ -106,7 +91,7 @@ export class GpuFrameBuffer {
     // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texImage2D(
       gl.TEXTURE_2D,
-      level,
+      mipmap,
       fmt.internalFormat,
       this.width,
       this.height,
@@ -115,6 +100,41 @@ export class GpuFrameBuffer {
       type,
       source,
       offset);
+  }
+
+  checkBufferSize() {
+    let { width, height, channels } = this;
+
+    let count = width * height * channels;
+    let spec = `${width}x${height}x${channels}`;
+    let note = `${spec} = ${count >> 20} M floats`;
+
+    if (count > 2 ** vargs.FBO_MAX_SIZE)
+      throw new Error(`FBO too large: ${note}`);
+
+    if (count > 2 ** 20)
+      log.i(`GPU buffer: ${note}`);
+  }
+
+  prepareFBO() {
+    let { webgl, width, height, channels } = this;
+    let gl = webgl.gl;
+    let fmt = webgl.getTextureFormat(channels);
+
+    gl.activeTexture(gl.TEXTURE0);
+
+    this.fmt = fmt;
+    this.type = webgl.ext.floatTexType;
+    this.texture = gl.createTexture();
+
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    gl.texImage2D(gl.TEXTURE_2D, 0, fmt.internalFormat, width, height, 0, fmt.format, this.type, null);
+
+    this.fbo = gl.createFramebuffer();
   }
 }
 

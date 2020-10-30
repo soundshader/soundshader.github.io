@@ -1,4 +1,5 @@
 import * as log from '../log.js';
+import * as vargs from '../vargs.js';
 import { GpuFrameBuffer } from "./framebuffer.js";
 import { GpuProgram } from "./gpu-program.js";
 import { USE_ALPHA_CHANNEL } from "../vargs.js";
@@ -25,32 +26,6 @@ export class GpuContext {
       fragmentShader);
   }
 
-  prepareFrameBuffer(width, height, channels = 1) {
-    let gl = this.gl;
-    let type = this.ext.floatTexType;
-    let fmt = this.getTextureFormat(channels);
-
-    gl.activeTexture(gl.TEXTURE0);
-    let texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-    gl.texImage2D(gl.TEXTURE_2D, 0, fmt.internalFormat, width, height, 0, fmt.format, type, null);
-
-    let fbo = gl.createFramebuffer();
-
-    return {
-      texture,
-      fbo,
-      fmt,
-      type,
-      width,
-      height,
-    };
-  }
-
   createFrameBuffer(size, channels = 1) {
     return new GpuFrameBuffer(this, { size, channels });
   }
@@ -63,7 +38,6 @@ export class GpuContext {
 
   init() {
     let canvas = this.canvas;
-    log.i('Initializing WebGL');
 
     let params = {
       alpha: USE_ALPHA_CHANNEL,
@@ -72,6 +46,8 @@ export class GpuContext {
       antialias: false,
       preserveDrawingBuffer: false,
     };
+
+    log.i('Initializing WebGL', params);
 
     let gl = canvas.getContext('webgl2', params);
     let isWebGL2 = !!gl;
@@ -87,7 +63,16 @@ export class GpuContext {
       throw new Error('Cannot get WebGL context');
     }
 
-    log.i('WebGL context v' + gl.VERSION);
+    log.i('WebGL', isWebGL2 ? 2 : 1, gl.VERSION);
+
+    let fsprec = (fp) => gl.getShaderPrecisionFormat(
+      gl.FRAGMENT_SHADER, fp).precision;
+    log.i('Shader precision:',
+      'float =', [fsprec(gl.HIGH_FLOAT), fsprec(gl.MEDIUM_FLOAT), fsprec(gl.LOW_FLOAT)].join(','),
+      'int =', [fsprec(gl.HIGH_INT), fsprec(gl.MEDIUM_INT), fsprec(gl.LOW_INT)].join(','));
+    log.i('Chosen precision:',
+      'float=' + vargs.FLOAT_PRECISION,
+      'int=' + vargs.INT_PRECISION);
 
     if (isWebGL2)
       gl.getExtension('EXT_color_buffer_float');
