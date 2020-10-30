@@ -7,7 +7,9 @@ Different images use slightly different coloring schemes. Usually, linear mappin
 ![](../pics/abora-1.png) | ![](../pics/bowl-3.png) | ![](../pics/bowl-4.png) | ![](../pics/wren-phase.jpg)
 ![](../pics/song-1.png) | ![](../pics/song-2.png) | ![](../pics/vivaldi-1.png) | ![](../pics/bird-1.png)
 ![](../pics/bird-2.png) | ![](../pics/bowl-1.png) | ![](../pics/bowl-2.png)    | ![](../pics/bird-3.png)
-![](../pics/accord.png) | ![](../pics/allegro.jpg) | |
+![](../pics/accord.png) | ![](../pics/allegro.jpg) | ![](../pics/oblivion.jpg) | ![](../pics/quake2.jpg)
+![](../pics/dalailama.jpg) | ![](../pics/overtone.jpg) | [![](../pics/a-vowel.jpg)](https://freesound.org/people/Timbre/sounds/103952/) | ![](../pics/aum.jpg)
+![](../pics/dem.jpg) | [![](../pics/organ.jpg)](https://freesound.org/people/InspectorJ/sounds/402095/)  | TBD  | TBD
 
 # Some ACF videos
 

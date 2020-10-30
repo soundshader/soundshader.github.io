@@ -166,9 +166,10 @@ export class AudioController {
         let sr = this.audioCtx.sampleRate;
         let nw = this.waveform.length;
         let t = this.analyser.context.currentTime | 0;
+        let d = (this.audioEl ? this.audioEl.duration : 0) | 0;
         // This awkward construct avoids re-creating DOM text nodes.
         let node = this.stats.firstChild || this.stats;
-        node.textContent = `${fps} fps ${sr} Hz / ${nw} @ ${t} s`;
+        node.textContent = `${fps} fps ${sr} Hz / ${nw} @ ${t} / ${d} s`;
         time0 = time;
         frames = this.timeStep;
       }

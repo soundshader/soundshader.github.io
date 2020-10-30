@@ -17,11 +17,6 @@ export class GpuAcfVisualizerProgram {
     let size = Math.min(waveformLen, vargs.ACF_MAX_SIZE);
     let aa = Math.log2(size / canvasSize);
 
-    log.i('ACF initializing with config:',
-      'wave=', waveformLen,
-      'fft=', size,
-      'img=', canvasSize);
-
     if (aa != Math.floor(aa))
       throw new Error('ACF MSAA 2^N != ' + aa);
 
@@ -42,6 +37,13 @@ export class GpuAcfVisualizerProgram {
     this.acfImage2 = new GpuFrameBuffer(webgl, { size });
     this.heightMapAA = new GpuFrameBuffer(webgl, { size: size >> aa });
     this.heightMapStats = new GpuFrameBuffer(webgl, { size: 1, channels: 4 });
+
+    log.i('ACF config:',
+      'wave', 1, 'x', waveformLen, '->',
+      'acf', 1, 'x', waveformLen, '->',
+      'hmap', size, 'x', size, '->',
+      'hmap.img', size >> aa, 'x', size >> aa, '->',
+      'rgba', canvasSize, 'x', canvasSize);
   }
 
   exec({ uWaveFormRaw, uMousePos }, output) {
