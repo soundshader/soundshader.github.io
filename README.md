@@ -6,9 +6,9 @@
 
  Images below are ACF height maps in polar coordinates. ACF values are linearly mapped from -3sigma .. +3sigma range to the blue..orange palette.
 
-Female vocal         | David Parsons        | Vivaldi                 | a bird
--------------------- | -------------------- | ----------------------- | ---
-![](pics/song-2.jpg) | ![](pics/bowl-3.jpg) | ![](pics/vivaldi-1.jpg) | ![](pics/bird-2.jpg)
+Female vocal         | David Parsons        | Piano                   | Bird
+-------------------- | -------------------- | ----------------------- | --------------------
+![](pics/song-2.jpg) | ![](pics/bowl-3.jpg) | ![](pics/piano-p.jpg)   | ![](pics/bird-2.jpg)
 
 More examples: [soundshader.github.io/gallery](https://soundshader.github.io/gallery/) (beware of large images).
 
