@@ -295,8 +295,11 @@ class GpuColorizer extends GpuTransformProgram {
         const float N = ${size}.0;
         const float R_MAX = 0.9;
         const float N_SIGMA = float(${sigma});
-        const vec3 COLOR_1 = vec3(4.0, 2.0, 1.0);
-        const vec3 COLOR_2 = vec3(1.0, 2.0, 4.0);
+        const vec3 COLOR_1 = vec3(
+          ${vargs.ACF_RGB.split(',')
+          .map(x => (+x || 0).toFixed(3))
+          .join(',')});
+        const vec3 COLOR_2 = COLOR_1.zyx;
         const bool CIRCLE = ${vargs.ACF_COORDS == 0};
 
         const vec2 dx = vec2(1.0, 0.0) / N;

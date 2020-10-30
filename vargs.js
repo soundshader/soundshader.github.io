@@ -14,6 +14,7 @@ export const ACF_EXP = numarg('acf.exp', 0);
 export const ACF_MAX_SIZE = numarg('acf.max', 2048);
 export const ACF_COORDS = numarg('acf.coords', 0);
 export const ACF_SIGMA = numarg('acf.sig', 3.0);
+export const ACF_RGB = strarg('acf.rgb', '4,2,1');
 export const REC_FRAMERATE = numarg('rec.fps', 0);
 export const CWT_BRIGHTNESS = numarg('cwt.b', 1);
 export const CWT_LEN = numarg('cwt.len', 17);
