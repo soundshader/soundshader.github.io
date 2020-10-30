@@ -1,4 +1,4 @@
-See also the project page: [github.com/soundshader](https://github.com/soundshader/soundshader.github.io)
+The main project page: [github.com/soundshader](https://github.com/soundshader/soundshader.github.io)
 
 # Some ACF images
 
