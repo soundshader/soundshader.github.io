@@ -3,6 +3,7 @@ import { AudioController } from './audio/controller.js';
 import { CwtController } from './audio/cwt-controller.js';
 import * as log from './log.js';
 
+let btnDemo = document.querySelector('#demo');
 let btnUpload = document.querySelector('#upload');
 let btnLogs = document.querySelector('#log');
 let btnMic = document.querySelector('#mic');
@@ -32,7 +33,20 @@ function main() {
   setMouseHandlers();
   setRecordingHandler();
   setLogsHandler();
-  divStats.textContent = 'Select a mp3 file or use mic.';
+  setDemoButtonHandler();
+  divStats.textContent = 'Select a file or use mic.';
+}
+
+function setDemoButtonHandler() {
+  let id = vargs.DEMO_ID;
+  let url = '/mp3/' + id + '.mp3';
+  btnDemo.style.display = id ? '' : 'none';
+  btnDemo.onclick = async () => {
+    let controller = getAudioController();
+    await controller.stop();
+    await initAudioSource(url);
+    await controller.start(audioStream, null, audio);
+  };
 }
 
 function setLogsHandler() {
@@ -184,24 +198,33 @@ async function selectAudioFile() {
     };
   });
 
-  if (!file) return {};
+  if (!file) return;
+
   log.i('Selected file:', file.type,
     file.size / 2 ** 10 | 0, 'KB', file.name);
   document.title = file.name;
-
   let url = URL.createObjectURL(file);
+  await initAudioSource(url);
+  return file;
+}
+
+async function initAudioSource(url) {
+  log.i('Decoding audio file:', url);
+
   audio.src = url;
   audio.playbackRate = vargs.PLAYBACK_RATE;
-  log.i('Decoding audio file with <audio> element');
 
   await new Promise((resolve, reject) => {
-    audio.onloadeddata = () => resolve();
-    audio.onerror = () => reject(audio.error);
+    audio.onloadeddata =
+      () => resolve();
+    audio.onerror =
+      () => reject(audio.error);
   });
 
   log.i('Capturing audio stream');
   audioStream = audio.captureStream ?
     audio.captureStream() :
     audio.mozCaptureStream();
-  return file;
+
+  log.i('Audio stream id:', audioStream.id);
 }

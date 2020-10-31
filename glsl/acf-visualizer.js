@@ -70,7 +70,7 @@ export class GpuAcfVisualizerProgram {
 
       this.heightMap.exec({
         uFlat: this.flat,
-        uZoom: 1.0 + Math.exp(my * 10.0),
+        uZoom: 1.0 + Math.exp(my * vargs.ACF_ZOOM),
         uExp: Math.exp(mx * vargs.ACF_EXP),
         uACF: this.acfImage2,
       });

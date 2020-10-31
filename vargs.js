@@ -11,6 +11,7 @@ export const IMAGE_SIZE = numarg('img', 1024);
 export const USE_MOUSE = numarg('mouse', 1);
 export const ACF_COLOR_SCHEME = numarg('acf.cs', 3);
 export const ACF_EXP = numarg('acf.exp', 0);
+export const ACF_ZOOM = numarg('acf.zoom', 5.0);
 export const ACF_MAX_SIZE = numarg('acf.max', 2048);
 export const ACF_COORDS = numarg('acf.coords', 0);
 export const ACF_SIGMA = numarg('acf.sig', 3.0);
@@ -28,6 +29,7 @@ export const FBO_MAX_SIZE = numarg('fbo.max', 27);
 export const SHOW_LOGS = numarg('log', 1);
 export const FLOAT_PRECISION = strarg('fp', 'highp');
 export const INT_PRECISION = strarg('ip', 'highp');
+export const DEMO_ID = numarg('demo', 330891);
 
 console.groupEnd();
 
