@@ -4,12 +4,12 @@ console.groupCollapsed('Config:');
 
 export const SIZE = numarg('n', 2048);
 export const SHADER = strarg('s', 'acf');
-export const SHADER_FPS = numarg('fps', 60);
+export const SHADER_FPS = numarg('fps', 250);
 export const SAMPLE_RATE = numarg('sr', 44.1);
 export const PLAYBACK_RATE = numarg('pbr', 1.0);
 export const IMAGE_SIZE = numarg('img', 1024);
 export const USE_MOUSE = numarg('mouse', 1);
-export const ACF_COLOR_SCHEME = numarg('acf.cs', 3);
+export const ACF_COLOR_SCHEME = numarg('acf.cs', 1);
 export const ACF_EXP = numarg('acf.exp', 0);
 export const ACF_ZOOM = numarg('acf.zoom', 5.0);
 export const ACF_MAX_SIZE = numarg('acf.max', 2048);
@@ -29,7 +29,7 @@ export const FBO_MAX_SIZE = numarg('fbo.max', 27);
 export const SHOW_LOGS = numarg('log', 1);
 export const FLOAT_PRECISION = strarg('fp', 'highp');
 export const INT_PRECISION = strarg('ip', 'highp');
-export const DEMO_ID = numarg('demo', 330891);
+export const DEMO_ID = numarg('demo', 103952);
 
 console.groupEnd();
 
