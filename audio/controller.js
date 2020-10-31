@@ -63,7 +63,7 @@ export class AudioController {
     let args = {
       size: this.fftHalfSize,
       waveformLen: this.waveform.length,
-      canvasSize: this.canvas.width,
+      imgSize: this.canvas.width,
       maxFreq: this.maxFreq,
       logScale: vargs.FFT_LOG_SCALE,
     };
@@ -71,10 +71,16 @@ export class AudioController {
     this.rendererId = 0;
     this.renderers = [];
 
+    let ctor = {
+      acf: GpuAcfVisualizerProgram,
+      fft: GpuSpectrogramProgram,
+      acfa: GpuAcfAnalyzerProgram,
+    }[vargs.SHADER];
+
+    if (!ctor) throw new Error('Unknown visualizer id: ' + vargs.SHADER);
+
     this.renderers.push(
-      new GpuAcfVisualizerProgram(this.webgl, args),
-      new GpuSpectrogramProgram(this.webgl, args),
-      new GpuAcfAnalyzerProgram(this.webgl, args));
+      new ctor(this.webgl, args));
   }
 
   switchAudioRenderer() {

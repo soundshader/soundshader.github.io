@@ -7,7 +7,7 @@ import { GpuStatsProgram } from "./stats.js";
 import * as vargs from "../vargs.js";
 
 export class GpuAcfVisualizerProgram {
-  constructor(webgl, { waveformLen, canvasSize }) {
+  constructor(webgl, { waveformLen, imgSize }) {
     this.webgl = webgl;
 
     // N = waveform.length
@@ -15,7 +15,7 @@ export class GpuAcfVisualizerProgram {
     // ACF = N x (re)
 
     let size = Math.min(waveformLen, vargs.ACF_MAX_SIZE);
-    let aa = Math.log2(size / canvasSize);
+    let aa = Math.log2(size / imgSize);
 
     if (aa != Math.floor(aa))
       throw new Error('ACF MSAA 2^N != ' + aa);
@@ -43,13 +43,16 @@ export class GpuAcfVisualizerProgram {
       'acf', 1, 'x', waveformLen, '->',
       'hmap', size, 'x', size, '->',
       'hmap.img', size >> aa, 'x', size >> aa, '->',
-      'rgba', canvasSize, 'x', canvasSize);
+      'rgba', imgSize, 'x', imgSize);
   }
 
   exec({ uWaveFormRaw, uMousePos }, output) {
+    let [mx, my] = uMousePos;
+
     if (uWaveFormRaw) {
       this.gpuACF.exec({
         uWaveFormRaw,
+        uMX: mx * 0.5 + 0.5,
       }, this.acfBuffer);
 
       this.downsampler2.exec({
@@ -66,8 +69,6 @@ export class GpuAcfVisualizerProgram {
     }
 
     if (output != GpuFrameBuffer.DUMMY) {
-      let [mx, my] = uMousePos;
-
       this.heightMap.exec({
         uFlat: this.flat,
         uZoom: 1.0 + Math.exp(my * vargs.ACF_ZOOM),
@@ -120,10 +121,32 @@ class GpuACF {
     this.sqrabs = new GpuTransformProgram(webgl, {
       fshader: `
         in vec2 vTex;
+
         uniform sampler2D uInput;
+        uniform float uMX;
+
+        const float SIGMA = 0.15;
+        const float PI = ${Math.PI};
+        const float S_PI_2 = 1.0 / SIGMA / sqrt(2.0 * PI);
+
+        float gaussian(float u) {
+          float s = u / SIGMA;
+          return S_PI_2 * exp(-0.5 * s * s);
+        }
+
+        float g_filter(float w0) {
+          ivec2 size = textureSize(uInput, 0);
+          ivec2 iv = ivec2(vTex * vec2(size) - 0.5);
+          int i = iv.x + iv.y * size.x;
+          int n = size.x * size.y;
+          float w = 2.0 * float(i) / float(n);
+          return gaussian(w0 - min(w, 1.0 - w));
+        }
+
         void main() {
           vec2 z = texture(uInput, vTex).xy;
-          v_FragColor = vec4(dot(z, z), 0.0, 0.0, 0.0);
+          float g = 1.0; // g_filter(uMX);
+          v_FragColor = vec4(g * dot(z, z), 0.0, 0.0, 0.0);
         }
       `,
     });
@@ -156,7 +179,7 @@ class GpuACF {
     });
   }
 
-  exec({ uWaveFormRaw }, uACF) {
+  exec({ uWaveFormRaw, uMX }, uACF) {
     if (uACF.width != 1 || uACF.height != this.size)
       throw new Error('ACF output must be a 1xN buffer');
     if (uWaveFormRaw.length != this.size)
@@ -164,7 +187,7 @@ class GpuACF {
     this.temp0.source = uWaveFormRaw;
     this.expand.exec({ uInput: this.temp0 }, this.temp1);
     this.fft.transform(this.temp1, this.temp2);
-    this.sqrabs.exec({ uInput: this.temp2 }, this.temp1);
+    this.sqrabs.exec({ uInput: this.temp2, uMX }, this.temp1);
     // In general, ACF[X] needs to do inverseFFT[S]
     // here, but since S is real and ACF[X] is also
     // real, inverseFFT here is equivalent to FFT.
