@@ -6,6 +6,4 @@ window.onunhandledrejection =
     }
     let div = document.querySelector('#error');
     div.textContent = message || error.message;
-    div.stackTrace = (error.stack || error) + '';
-    div.onclick = () => div.textContent = div.stackTrace;
   };

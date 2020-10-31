@@ -25,7 +25,7 @@ export const FFT_TIME = numarg('fft.time', 0);
 export const FFT_LOG_SCALE = numarg('fft.log', 1);
 export const USE_ALPHA_CHANNEL = numarg('alpha', 0);
 export const FBO_MAX_SIZE = numarg('fbo.max', 27);
-export const SHOW_LOGS = numarg('logs', 0);
+export const SHOW_LOGS = numarg('log', 1);
 export const FLOAT_PRECISION = strarg('fp', 'highp');
 export const INT_PRECISION = strarg('ip', 'highp');
 

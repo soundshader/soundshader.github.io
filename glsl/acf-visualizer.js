@@ -387,6 +387,10 @@ class GpuColorizer extends GpuTransformProgram {
           return clamp(g * rgb, 0.0, 1.0);
         }
 
+        vec3 hcolor_6(float h) {
+          return vec3(h <= 0.0 ? 0.0 : 1.0);
+        }
+
         vec4 rgba(vec2 vTex) {
           float r = length(v);
           if (r > 0.99 && CIRCLE && !uFlat)

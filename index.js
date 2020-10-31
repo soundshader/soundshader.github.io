@@ -192,12 +192,11 @@ async function selectAudioFile() {
   let url = URL.createObjectURL(file);
   audio.src = url;
   audio.playbackRate = vargs.PLAYBACK_RATE;
-  log.i('audio.src =', url,
-    'playbackRate =', audio.playbackRate);
+  log.i('Decoding audio file with <audio> element');
 
-  await new Promise(resolve => {
-    audio.onloadeddata =
-      () => resolve();
+  await new Promise((resolve, reject) => {
+    audio.onloadeddata = () => resolve();
+    audio.onerror = () => reject(audio.error);
   });
 
   log.i('Capturing audio stream');
