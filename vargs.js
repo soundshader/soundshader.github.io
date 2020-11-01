@@ -4,12 +4,12 @@ console.groupCollapsed('Config:');
 
 export const SIZE = numarg('n', 4096);
 export const SHADER = strarg('s', 'acf');
-export const SHADER_FPS = numarg('fps', 125);
+export const SHADER_FPS = numarg('fps', 60);
 export const SAMPLE_RATE = numarg('sr', 44.1);
 export const PLAYBACK_RATE = numarg('pbr', 1.0);
 export const IMAGE_SIZE = numarg('img', 1024);
 export const USE_MOUSE = numarg('mouse', 1);
-export const ACF_COLOR_SCHEME = numarg('acf.cs', 2);
+export const ACF_COLOR_SCHEME = numarg('acf.cs', 3);
 export const ACF_EXP = numarg('acf.exp', 0);
 export const ACF_STATS = numarg('acf.stats', 0);
 export const ACF_ZOOM = numarg('acf.zoom', 5.0);

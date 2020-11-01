@@ -272,11 +272,6 @@ class GpuHeightMapProgram extends GpuTransformProgram {
           float arg = atan2(v.y, v.x);
           float a = -0.25 + 0.5 * arg / PI;
           return h_acf(vec2(t, a));
-
-          /* float s = 0.5 / N / PI / t;
-          float q = rand(dot(vTex, vec2(1.2918, 0.9821)/PI)) - 0.5;
-          return h_acf_msaa(t, a - s * q * 0.1, s,
-            int(clamp(ceil(1.0 / PI / t), 1.0, 10.0))); */
         }
 
         float fetch_1() {
@@ -425,6 +420,15 @@ class GpuColorizer extends GpuTransformProgram {
 
         vec3 hcolor_6(float h) {
           return vec3(h <= 0.0 ? 0.0 : 1.0);
+        }
+
+        vec3 hcolor_7(float h) {
+          vec3 n = grad2(vTex);
+          vec3 s = normalize(vec3(1.0, 1.0, 0.2));
+          float g = dot(n, s) * 0.5;
+          vec3 rgb = mix(COLOR_2, COLOR_1,
+            clamp(5.0*h, -1.0, 1.0) * 0.5 + 0.5);
+          return clamp(rgb * g, 0.0, 1.0);
         }
 
         vec4 rgba(vec2 vTex) {
