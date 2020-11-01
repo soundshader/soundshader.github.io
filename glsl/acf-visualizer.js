@@ -387,12 +387,16 @@ class GpuColorizer extends GpuTransformProgram {
         }
 
         vec3 hcolor_3(float h) {
-          vec3 c1 = 0.2 * hcolor_1(h);
-          vec3 c2 = 0.2 * hcolor_1(h * 1.5);
-          vec3 c3 = 0.2 * hcolor_1(h * 2.0);
-          vec3 c4 = 0.2 * hcolor_1(h * 2.5);
-          vec3 c5 = 0.2 * hcolor_1(h * 3.0);
-          return c1 + c2 + c3 + c4 + c5;
+          vec3 sum = vec3(0.0);
+          float mag = 1.0;
+          int num = 10;
+
+          for (int k = 0; k < num; k++) {
+            sum += hcolor_1(h * mag);
+            mag *= 1.2;
+          }
+          
+          return sum / float(num);
         }
 
         vec3 hcolor_4(float h) {
