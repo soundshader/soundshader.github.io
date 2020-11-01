@@ -3,7 +3,7 @@ import * as vargs from '../vargs.js';
 import { GpuContext } from "../webgl/gpu-context.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuSpectrogramProgram } from "../glsl/spectrogram.js";
-import { GpuAcfVisualizerProgram } from '../glsl/acf-visualizer.js';
+import { GpuAcfVisualizerProgram, GpuAcfBandpassProgram } from '../glsl/acf-visualizer.js';
 import { GpuWaveformProgram as GpuAcfAnalyzerProgram } from '../glsl/acf-analyzer.js';
 
 // Uses WebAudio's getFloatTimeDomainData() to read the raw audio samples
@@ -72,7 +72,7 @@ export class AudioController {
     this.renderers = [];
 
     let ctor = {
-      acf: GpuAcfVisualizerProgram,
+      acf: GpuAcfBandpassProgram,
       fft: GpuSpectrogramProgram,
       acfa: GpuAcfAnalyzerProgram,
     }[vargs.SHADER];
