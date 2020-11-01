@@ -151,8 +151,6 @@ function setKeyboardHandlers() {
     if (handler) handler(e);
   };
 
-  setKeyboardHandler('r', 'Switch sound shader.',
-    () => getAudioController().switchAudioRenderer());
   setKeyboardHandler('c', 'Switch coords.',
     () => getAudioController().switchCoords());
 }

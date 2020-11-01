@@ -44,6 +44,18 @@ export class GpuAcfVisualizerProgram {
       'hmap', size, 'x', size, '->',
       'hmap.img', size >> aa, 'x', size >> aa, '->',
       'rgba', imgSize, 'x', imgSize);
+
+    if (vargs.ACF_STATS > 0) {
+      log.i('Logging ACF stats every', vargs.ACF_STATS, 'sec');
+      setInterval(() => {
+        let [min, max, avg, stddev] = this.heightMapStats.download();
+        log.i('ACF stats:',
+          'stddev', stddev.toExponential(2),
+          'avg', (avg / stddev).toFixed(2) + 's',
+          'min', (min / stddev).toFixed(2) + 's',
+          'max', (max / stddev).toFixed(2) + 's');
+      }, vargs.ACF_STATS * 1e3 | 0);
+    }
   }
 
   exec({ uWaveFormRaw, uMousePos }, output) {

@@ -26,7 +26,7 @@ export function download() {
 }
 
 function record(level, args) {
-  let time = new Date().toJSON();
+  let time = new Date().toJSON().replace(/^.+T|Z$/g, '');
   let line = [time, ...args].join(' ');
   lines.push(line);
   level == 'V' && console.debug(...args);

@@ -83,11 +83,6 @@ export class AudioController {
       new ctor(this.webgl, args));
   }
 
-  switchAudioRenderer() {
-    this.rendererId = (this.rendererId + 1)
-      % this.renderers.length;
-  }
-
   switchCoords() {
     let node = this.renderers[this.rendererId];
     node.flat = !node.flat;

@@ -11,6 +11,7 @@ export const IMAGE_SIZE = numarg('img', 1024);
 export const USE_MOUSE = numarg('mouse', 1);
 export const ACF_COLOR_SCHEME = numarg('acf.cs', 2);
 export const ACF_EXP = numarg('acf.exp', 0);
+export const ACF_STATS = numarg('acf.stats', 0);
 export const ACF_ZOOM = numarg('acf.zoom', 5.0);
 export const ACF_MAX_SIZE = numarg('acf.max', 2048);
 export const ACF_COORDS = numarg('acf.coords', 0);
