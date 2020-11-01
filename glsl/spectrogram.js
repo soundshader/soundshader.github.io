@@ -1,5 +1,5 @@
 import { GpuTransformProgram } from "../../../webgl/transform.js";
-import { shaderUtils } from "./basics.js";
+import { shaderUtils, colorUtils } from "./basics.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { FFT } from "../audio/fft.js";
 import { FFT_TIME } from "../vargs.js";
@@ -86,6 +86,7 @@ class GpuColorizer extends GpuTransformProgram {
         const float TIMESTEP = float(${FFT_TIME});
 
         ${shaderUtils}
+        ${colorUtils}
 
         float y_to_w(float y) {
           return !LOG_SCALE ? y : pow(2.0, mix(W_MIN, W_MAX, y));
