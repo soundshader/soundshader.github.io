@@ -2,7 +2,7 @@ import * as log from '../log.js';
 import { FFT } from "../audio/fft.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
-import { textureUtils, shaderUtils } from "./basics.js";
+import { textureUtils, shaderUtils, colorUtils } from "./basics.js";
 import { GpuStatsProgram } from "./stats.js";
 import * as vargs from "../vargs.js";
 
@@ -308,6 +308,8 @@ class GpuGradientProgram extends GpuTransformProgram {
   }
 }
 
+const parseRGB = str => str.split(',').map(x => (+x || 0).toFixed(3)).join(',');
+
 class GpuColorizer extends GpuTransformProgram {
   constructor(webgl, { size, sigma }) {
     super(webgl, {
@@ -318,12 +320,11 @@ class GpuColorizer extends GpuTransformProgram {
         const float N = ${size}.0;
         const float R_MAX = 0.9;
         const float N_SIGMA = float(${sigma});
-        const vec3 COLOR_1 = vec3(
-          ${vargs.ACF_RGB.split(',')
-          .map(x => (+x || 0).toFixed(3))
-          .join(',')});
-        const vec3 COLOR_2 = COLOR_1.zyx;
+        const vec3 COLOR_1 = vec3(${parseRGB(vargs.ACF_RGB_1)});
+        const vec3 COLOR_2 = vec3(${parseRGB(vargs.ACF_RGB_2)});
         const bool CIRCLE = ${vargs.ACF_COORDS == 0};
+
+        ${colorUtils}
 
         const vec2 dx = vec2(1.0, 0.0) / N;
         const vec2 dy = vec2(0.0, 1.0) / N;
