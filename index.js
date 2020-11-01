@@ -3,7 +3,6 @@ import { AudioController } from './audio/controller.js';
 import { CwtController } from './audio/cwt-controller.js';
 import * as log from './log.js';
 
-let btnDemo = document.querySelector('#demo');
 let btnUpload = document.querySelector('#upload');
 let btnLogs = document.querySelector('#log');
 let btnMic = document.querySelector('#mic');
@@ -33,20 +32,7 @@ function main() {
   setMouseHandlers();
   setRecordingHandler();
   setLogsHandler();
-  setDemoButtonHandler();
-  divStats.textContent = 'Select a file or use mic.';
-}
-
-function setDemoButtonHandler() {
-  let id = vargs.DEMO_ID;
-  let url = '/mp3/' + id + '.mp3';
-  btnDemo.style.display = id ? '' : 'none';
-  btnDemo.onclick = async () => {
-    let controller = getAudioController();
-    await controller.stop();
-    await initAudioSource(url);
-    await controller.start(audioStream, null, audio);
-  };
+  divStats.textContent = 'Select a mp3 file or use mic.';
 }
 
 function setLogsHandler() {
@@ -151,6 +137,8 @@ function setKeyboardHandlers() {
     if (handler) handler(e);
   };
 
+  setKeyboardHandler('r', 'Switch sound shader.',
+    () => getAudioController().switchAudioRenderer());
   setKeyboardHandler('c', 'Switch coords.',
     () => getAudioController().switchCoords());
 }
@@ -196,33 +184,25 @@ async function selectAudioFile() {
     };
   });
 
-  if (!file) return;
-
+  if (!file) return {};
   log.i('Selected file:', file.type,
     file.size / 2 ** 10 | 0, 'KB', file.name);
   document.title = file.name;
+
   let url = URL.createObjectURL(file);
-  await initAudioSource(url);
-  return file;
-}
-
-async function initAudioSource(url) {
-  log.i('Decoding audio file:', url);
-
   audio.src = url;
   audio.playbackRate = vargs.PLAYBACK_RATE;
+  log.i('audio.src =', url,
+    'playbackRate =', audio.playbackRate);
 
-  await new Promise((resolve, reject) => {
+  await new Promise(resolve => {
     audio.onloadeddata =
       () => resolve();
-    audio.onerror =
-      () => reject(audio.error);
   });
 
   log.i('Capturing audio stream');
   audioStream = audio.captureStream ?
     audio.captureStream() :
     audio.mozCaptureStream();
-
-  log.i('Audio stream id:', audioStream.id);
+  return file;
 }

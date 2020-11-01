@@ -1,5 +1,4 @@
 import * as vargs from '../vargs.js';
-import * as log from '../log.js';
 
 const SHADER_PREFACE = `
   #version 300 es
@@ -99,9 +98,9 @@ export class GpuProgram {
   }
 
   static reportError(gl, shader, source) {
-    let info = gl.getShaderInfoLog(shader) || '';
-    let [, col, row] = /^ERROR: (\d+):(\d+):/.exec(info) || [];
-    let message = info.split('\n')[0];
+    let log = gl.getShaderInfoLog(shader) || '';
+    let [, col, row] = /^ERROR: (\d+):(\d+):/.exec(log) || [];
+    let message = log.split('\n')[0];
 
     if (row) {
       let lines = source.split(/\n/g);
