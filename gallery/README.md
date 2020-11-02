@@ -12,7 +12,7 @@ Different images use slightly different coloring schemes. Usually, linear mappin
 ![](../pics/accord.png) | ![](../pics/allegro.jpg) | ![](../pics/oblivion.jpg) | ![](../pics/quake2.jpg)
 ![](../pics/dalailama.jpg) | ![](../pics/overtone.jpg) | ![](../pics/a-vowel.jpg) | ![](../pics/aum.jpg)
 ![](../pics/dem.jpg) | ![](../pics/organ.jpg) | ![](../pics/poznan.jpg) | ![](../pics/synth.jpg)
-![](../pics/piano.jpg) | ![]() | ![]() | ![]()
+![](../pics/piano.jpg) | ![](../pics/bach.jpg) | ![]() | ![]()
 
 # Some ACF videos
 
