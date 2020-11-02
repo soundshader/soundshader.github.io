@@ -2,9 +2,7 @@
 
 > _[Autocorrelation](https://pages.mtu.edu/~suits/autocorrelation.html) is used to compare a signal with a time-delayed version of itself. If a signal is periodic, then the signal will be perfectly correlated with a version of itself if the time-delay is an integer number of periods. That fact, along with related experiments, has implicated autocorrelation as a potentially important part of signal processing in human hearing._
 
- ACF is a simple method to visualize music that produces surprisingly good results. Perhaps the most unexpected property of ACF is that it accurately transfers the subjective "harmony level" from music to images. It's almost an unreasonable property, if you think about it.
-
- Images below are ACF height maps in polar coordinates. ACF values are linearly mapped from -3sigma .. +3sigma range to the blue..orange palette.
+ ACF is a simple method to visualize music that produces surprisingly good results. Perhaps the most unexpected property of ACF is that it accurately transfers the subjective "harmony level" from music to images. It's almost an unreasonable property, if you think about it. Images below are ACF height maps in polar coordinates.
 
 Female vocal         | David Parsons        | Piano                   | Bird
 -------------------- | -------------------- | ----------------------- | --------------------
