@@ -2,7 +2,7 @@ let args = new URLSearchParams(location.search);
 
 console.groupCollapsed('Config:');
 
-export const SIZE = numarg('n', 4096);
+export const SIZE = numarg('n', 2048);
 export const SHADER = strarg('s', 'acf');
 export const SHADER_FPS = numarg('fps', 60);
 export const SAMPLE_RATE = numarg('sr', 44.1);
@@ -18,8 +18,8 @@ export const ACF_ZOOM = numarg('acf.zoom', 5.0);
 export const ACF_MAX_SIZE = numarg('acf.max', 2048);
 export const ACF_COORDS = numarg('acf.coords', 0);
 export const ACF_SIGMA = numarg('acf.sig', 3.0);
-export const ACF_RGB_1 = strarg('acf.c1', '2,1,0.5');
-export const ACF_RGB_2 = strarg('acf.c2', '0.5,1,2');
+export const ACF_RGB_1 = strarg('acf.c1', '4,2,1');
+export const ACF_RGB_2 = strarg('acf.c2', '1,2,4');
 
 export const REC_FRAMERATE = numarg('rec.fps', 0);
 export const CWT_BRIGHTNESS = numarg('cwt.b', 1);
