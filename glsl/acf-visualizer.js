@@ -84,7 +84,6 @@ export class GpuAcfVisualizerProgram {
       this.heightMap.exec({
         uFlat: this.flat,
         uZoom: 1.0 + Math.exp(my * vargs.ACF_ZOOM),
-        uExp: Math.exp(mx * vargs.ACF_EXP),
         uACF: this.acfImage2,
       });
 
@@ -220,7 +219,6 @@ class GpuHeightMapProgram extends GpuTransformProgram {
 
         uniform sampler2D uACF;
         uniform float uZoom;
-        uniform float uExp;
         uniform bool uFlat;
 
         const float N = float(${size});
@@ -264,7 +262,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
 
         float fetch_0() {
           float r = length(v);
-          float t = 1.0 - pow(r, uExp) / uZoom;
+          float t = 1.0 - r / uZoom;
 
           if (r < 0.5/N || r > 1.0 - 0.5/N || t < 0.5/N)
             return 0.0;
@@ -276,7 +274,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
 
         float fetch_1() {
           float r = 1.0 - vTex.y;
-          float t = 1.0 - pow(r, uExp) / uZoom;
+          float t = 1.0 - r / uZoom;
 
           if (r < 0.5/N || r > 1.0 - 0.5/N || t < 0.5/N)
             return 0.0;
