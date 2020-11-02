@@ -57,20 +57,14 @@ export class GpuContext {
     log.i('Debug mode:', vargs.DEBUG);
 
     let gl = canvas.getContext('webgl2', params);
-    let isWebGL2 = !!gl;
-
-    if (!isWebGL2) {
-      log.w('WebGL 2.0 unavailable');
-      gl = canvas.getContext('webgl', params) ||
-        canvas.getContext('experimental-webgl', params);
-    }
+    if (!gl) throw new Error('WebGL 2.0 not available');
 
     if (!gl) {
       log.w('getContext("webgl") blocked by getContext("2d")?');
       throw new Error('Cannot get WebGL context');
     }
 
-    log.i('WebGL', isWebGL2 ? 2 : 1, gl.VERSION);
+    log.i('WebGL v' + gl.VERSION);
 
     let fsprec = (fp) => gl.getShaderPrecisionFormat(
       gl.FRAGMENT_SHADER, fp).precision;
@@ -81,28 +75,14 @@ export class GpuContext {
       'float=' + vargs.FLOAT_PRECISION,
       'int=' + vargs.INT_PRECISION);
 
-    if (isWebGL2)
       gl.getExtension('EXT_color_buffer_float');
 
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
 
-    let floatTexType = isWebGL2 ?
-      gl.FLOAT :
-      gl.getExtension('OES_texture_float').FLOAT_OES;
-
-    let formatRGBA;
-    let formatRG;
-    let formatR;
-
-    if (isWebGL2) {
-      formatRGBA = this.getSupportedFormat(gl, gl.RGBA32F, gl.RGBA, floatTexType);
-      formatRG = this.getSupportedFormat(gl, gl.RG32F, gl.RG, floatTexType);
-      formatR = this.getSupportedFormat(gl, gl.R32F, gl.RED, floatTexType);
-    } else {
-      formatRGBA = this.getSupportedFormat(gl, gl.RGBA, gl.RGBA, floatTexType);
-      formatRG = this.getSupportedFormat(gl, gl.RGBA, gl.RGBA, floatTexType);
-      formatR = this.getSupportedFormat(gl, gl.RGBA, gl.RGBA, floatTexType);
-    }
+    let floatTexType = gl.FLOAT;
+    let formatRGBA = this.getSupportedFormat(gl, gl.RGBA32F, gl.RGBA, floatTexType);
+    let formatRG = this.getSupportedFormat(gl, gl.RG32F, gl.RG, floatTexType);
+    let formatR = this.getSupportedFormat(gl, gl.R32F, gl.RED, floatTexType);
 
     this.gl = gl;
 

@@ -107,16 +107,19 @@ export class GpuFrameBuffer {
   }
 
   checkBufferSize() {
+    let gl = this.webgl.gl;
+
     let { width, height, channels } = this;
 
     let count = width * height * channels;
     let spec = `${width}x${height}x${channels}`;
-    let note = `${spec} = ${count >> 20} M floats`;
+    let note = `${spec} = ${count >> 20} x float`;
+    let tmax = gl.getParameter(gl.MAX_TEXTURE_SIZE);
 
     log.i(`GPU buffer: ${note}`);
 
-    if (count > 2 ** vargs.FBO_MAX_SIZE)
-      throw new Error(`FBO too large: ${note}`);    
+    if (count > 2 ** vargs.FBO_MAX_SIZE || Math.max(width, height) > tmax)
+      throw new Error(`Texture too large: ${note}`);
   }
 
   prepareFBO() {
