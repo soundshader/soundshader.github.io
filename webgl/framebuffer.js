@@ -113,11 +113,10 @@ export class GpuFrameBuffer {
     let spec = `${width}x${height}x${channels}`;
     let note = `${spec} = ${count >> 20} M floats`;
 
-    if (count > 2 ** vargs.FBO_MAX_SIZE)
-      throw new Error(`FBO too large: ${note}`);
+    log.i(`GPU buffer: ${note}`);
 
-    if (count > 2 ** 20)
-      log.i(`GPU buffer: ${note}`);
+    if (count > 2 ** vargs.FBO_MAX_SIZE)
+      throw new Error(`FBO too large: ${note}`);    
   }
 
   prepareFBO() {

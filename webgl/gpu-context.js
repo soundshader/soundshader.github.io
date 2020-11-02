@@ -14,7 +14,7 @@ export class GpuContext {
   checkError() {
     if (!vargs.DEBUG) return;
     let err = this.gl.getError();
-    if (err) throw new Error('gl.getError(): ' + err);
+    if (err) throw new Error('WebGL error code ' + err);
   }
 
   createVertexShader(source) {
