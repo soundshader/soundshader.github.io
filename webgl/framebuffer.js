@@ -65,8 +65,10 @@ export class GpuFrameBuffer {
   clear() {
     let gl = this.webgl.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    this.webgl.checkError();
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
       gl.TEXTURE_2D, this.texture, 0);
+    this.webgl.checkError();
     gl.viewport(0, 0, this.width, this.height);
     gl.clear(gl.COLOR_BUFFER_BIT);
   }
@@ -75,6 +77,7 @@ export class GpuFrameBuffer {
     let gl = this.webgl.gl;
     gl.activeTexture(gl.TEXTURE0 + id);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    this.webgl.checkError();
     if (this.source)
       this.upload(this.source);
     return id;
@@ -100,6 +103,7 @@ export class GpuFrameBuffer {
       type,
       source,
       offset);
+    this.webgl.checkError();
   }
 
   checkBufferSize() {
@@ -133,6 +137,7 @@ export class GpuFrameBuffer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
     gl.texImage2D(gl.TEXTURE_2D, 0, fmt.internalFormat, width, height, 0, fmt.format, this.type, null);
+    this.webgl.checkError();
 
     this.fbo = gl.createFramebuffer();
   }

@@ -34,11 +34,11 @@ export class GpuTransformProgram {
   exec(args = {}, output = this.output) {
     if (output == GpuFrameBuffer.DUMMY)
       return;
-    let gl = this.glctx.gl;
     let gp = this.program;
     gp.bind();
     this.bindArgs(args);
     gp.blit(output);
+    this.glctx.checkError();
   }
 
   bindArgs(args) {
@@ -83,6 +83,8 @@ export class GpuTransformProgram {
         default:
           throw new Error(`Unknown uniform type ${u.type} for ${u.name}`);
       }
+
+      this.glctx.checkError();
     }
   }
 }

@@ -2,6 +2,7 @@ let args = new URLSearchParams(location.search);
 
 console.groupCollapsed('Config:');
 
+export const DEBUG = numarg('dbg', 0);
 export const SIZE = numarg('n', 4096);
 export const SHADER = strarg('s', 'acf');
 export const SHADER_FPS = numarg('fps', 60);

@@ -60,6 +60,8 @@ export class AudioController {
     this.webgl = new GpuContext(this.canvas);
     this.webgl.init();
 
+    window.gl = this.webgl.gl;    
+
     let args = {
       size: this.fftHalfSize,
       waveformLen: this.waveform.length,

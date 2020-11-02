@@ -11,6 +11,12 @@ export class GpuContext {
     this.gl = null;
   }
 
+  checkError() {
+    if (!vargs.DEBUG) return;
+    let err = this.gl.getError();
+    if (err) throw new Error('gl.getError(): ' + err);
+  }
+
   createVertexShader(source) {
     return GpuProgram.createVertexShader(this.gl, source);
   }
@@ -48,6 +54,7 @@ export class GpuContext {
     };
 
     log.i('Initializing WebGL', params);
+    log.i('Debug mode:', vargs.DEBUG);
 
     let gl = canvas.getContext('webgl2', params);
     let isWebGL2 = !!gl;
