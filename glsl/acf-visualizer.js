@@ -134,30 +134,57 @@ class GpuACF {
         in vec2 vTex;
 
         uniform sampler2D uInput;
-        uniform float uMX;
 
-        const float SIGMA = 0.15;
-        const float PI = ${Math.PI};
-        const float S_PI_2 = 1.0 / SIGMA / sqrt(2.0 * PI);
+        void main() {
+          vec2 z = texture(uInput, vTex).xy;
+          v_FragColor = vec4(dot(z, z), 0.0, 0.0, 0.0);
+        }
+      `,
+    });
 
-        float gaussian(float u) {
-          float s = u / SIGMA;
-          return S_PI_2 * exp(-0.5 * s * s);
+    this.aweight = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+
+        uniform sampler2D uInput;
+
+        float gaussian(float u, float sigma) {
+          float s = u / sigma;
+          return exp(-0.5 * s * s) / sigma / ${Math.sqrt(2 * Math.PI)};
         }
 
-        float g_filter(float w0) {
+        float freq_abs(vec2 vTex) {
           ivec2 size = textureSize(uInput, 0);
           ivec2 iv = ivec2(vTex * vec2(size) - 0.5);
           int i = iv.x + iv.y * size.x;
           int n = size.x * size.y;
           float w = 2.0 * float(i) / float(n);
-          return gaussian(w0 - min(w, 1.0 - w));
+          return min(w, 1.0 - w) * 22.5e3;
+        }
+
+        float a_weight(float f) {
+          const float C1 = float(${20.6 ** 2});
+          const float C2 = float(${12200 ** 2});
+          const float C3 = float(${107.7 ** 2});
+          const float C4 = float(${737.9 ** 2});
+
+          float f2 = f * f;
+
+          float d0 = C2 * f2 * f2;
+          float d1 = f2 + C1;
+          float d2 = f2 + C2;
+          float d3 = sqrt(f2 + C3);
+          float d4 = sqrt(f2 + C4);
+
+          float ra = d0 / (d1 * d2 * d3 * d4);
+          return 2.0 + 20.0 * log(ra) / log(10.0);
         }
 
         void main() {
-          vec2 z = texture(uInput, vTex).xy;
-          float g = 1.0; // g_filter(uMX);
-          v_FragColor = vec4(g * dot(z, z), 0.0, 0.0, 0.0);
+          float f = freq_abs(vTex);
+          float a = a_weight(f);
+          float w = pow(10.0, a / 20.0 * float(${vargs.ACF_A_WEIGHT}));
+          v_FragColor = texture(uInput, vTex) * w;
         }
       `,
     });
@@ -198,7 +225,13 @@ class GpuACF {
     this.temp0.source = uWaveFormRaw;
     this.expand.exec({ uInput: this.temp0 }, this.temp1);
     this.fft.transform(this.temp1, this.temp2);
-    this.sqrabs.exec({ uInput: this.temp2, uMX }, this.temp1);
+    this.sqrabs.exec({ uInput: this.temp2 }, this.temp1);
+
+    if (vargs.ACF_A_WEIGHT > 0) {
+      this.aweight.exec({ uInput: this.temp1 }, this.temp2);
+      [this.temp1, this.temp2] = [this.temp2, this.temp1];
+    }
+
     // In general, ACF[X] needs to do inverseFFT[S]
     // here, but since S is real and ACF[X] is also
     // real, inverseFFT here is equivalent to FFT.

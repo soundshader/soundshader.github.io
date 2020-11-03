@@ -69,14 +69,12 @@ export class GpuContext {
     let fsprec = (fp) => gl.getShaderPrecisionFormat(
       gl.FRAGMENT_SHADER, fp).precision;
     log.i('Shader precision:',
-      'float =', [fsprec(gl.HIGH_FLOAT), fsprec(gl.MEDIUM_FLOAT), fsprec(gl.LOW_FLOAT)].join(','),
-      'int =', [fsprec(gl.HIGH_INT), fsprec(gl.MEDIUM_INT), fsprec(gl.LOW_INT)].join(','));
+      [gl.HIGH_FLOAT, gl.MEDIUM_FLOAT, gl.LOW_FLOAT].map(fsprec).join(', '));
     log.i('Chosen precision:',
       'float=' + vargs.FLOAT_PRECISION,
       'int=' + vargs.INT_PRECISION);
 
-      gl.getExtension('EXT_color_buffer_float');
-
+    gl.getExtension('EXT_color_buffer_float');
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
 
     let floatTexType = gl.FLOAT;

@@ -11,7 +11,7 @@ export const PLAYBACK_RATE = numarg('pbr', 1.0);
 export const IMAGE_SIZE = numarg('img', 1024);
 export const USE_MOUSE = numarg('mouse', 1);
 
-export const ACF_COLOR_SCHEME = numarg('acf.cs', 1);
+export const ACF_COLOR_SCHEME = numarg('acf.cs', 2);
 export const ACF_EXP = numarg('acf.exp', 1.5);
 export const ACF_ABS_MAX = numarg('acf.absmax', 1.0);
 export const ACF_STATS = numarg('acf.stats', 0);
@@ -19,6 +19,7 @@ export const ACF_ZOOM = numarg('acf.zoom', 5.0);
 export const ACF_MAX_SIZE = numarg('acf.max', 2048);
 export const ACF_COORDS = numarg('acf.coords', 0);
 export const ACF_SIGMA = numarg('acf.sig', 3.0);
+export const ACF_A_WEIGHT = numarg('acf.aweight', 0.0);
 export const ACF_RGB_1 = strarg('acf.c1', '4,2,1');
 export const ACF_RGB_2 = strarg('acf.c2', '1,2,4');
 
