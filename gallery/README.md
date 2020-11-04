@@ -12,7 +12,7 @@ Different images use slightly different coloring schemes. Usually, linear mappin
 ![](../pics/accord.png) | ![](../pics/allegro.jpg) | ![](../pics/oblivion.jpg) | ![](../pics/quake2.jpg)
 ![](../pics/dalailama.jpg) | ![](../pics/overtone.jpg) | ![](../pics/a-vowel.jpg) | ![](../pics/aum.jpg)
 ![](../pics/dem.jpg) | ![](../pics/organ.jpg) | ![](../pics/poznan.jpg) | ![](../pics/synth.jpg)
-![](../pics/piano.jpg) | ![](../pics/bach.jpg) | ![]() | ![]()
+![](../pics/piano.jpg) | ![](../pics/bach.jpg) | ![](../pics/parsons-2.jpg) | ![]()
 
 # Some ACF videos
 
@@ -24,4 +24,5 @@ A few recorded videos below use the same coloring scheme except that they assign
 - [Warbler](../vids/warbler.webm)
 - [Vivaldi](../vids/vivaldi.webm)
 - [Parsons](../vids/parsons.webm). That's my favorite example so far.
+- [Parsons 2](../vids/parsons-2.webm). Another remarkable example from David Parsons.
 - [Quake II](../vids/quake2.webm)

@@ -60,7 +60,7 @@ export class AudioController {
     this.webgl = new GpuContext(this.canvas);
     this.webgl.init();
 
-    window.gl = this.webgl.gl;    
+    window.gl = this.webgl.gl;
 
     let args = {
       size: this.fftHalfSize,
@@ -106,28 +106,50 @@ export class AudioController {
   }
 
   async start(audioStream, audioFile, audioEl) {
-    this.audioEl = audioEl;
-    this.stream = audioStream;
-    this.source = this.audioCtx.createMediaStreamSource(this.stream);
-    this.source.connect(this.analyser);
+    if (vargs.PRELOAD && audioFile) {
+      log.i('Decoding audio data...');
+      let buffer = await audioFile.arrayBuffer();
+      let adata = await this.audioCtx.decodeAudioData(buffer);
+      this.audioSamples = new Float32Array(adata.getChannelData(0));
+      this.audioOffset = 0;
 
-    log.i('Input sound:', this.waveform.length, 'samples/batch',
-      '@', this.audioCtx.sampleRate, 'Hz',
-      'x', this.source.channelCount, 'channels',
-      (audioEl ? audioEl.duration : 0) | 0, 'sec');
+      log.i('Decoded sound:', this.waveform.length, 'samples/batch',
+        '@', adata.sampleRate, 'Hz',
+        'x', adata.numberOfChannels, 'channels',
+        adata.duration, 'sec',
+        adata.length.toExponential(1), 'samples');
+    } else {
+      this.audioEl = audioEl;
+      this.stream = audioStream;
+      this.source = this.audioCtx.createMediaStreamSource(this.stream);
+      this.source.connect(this.analyser);
+
+      log.i('Input sound:', this.waveform.length, 'samples/batch',
+        '@', this.audioCtx.sampleRate, 'Hz',
+        'x', this.source.channelCount, 'channels',
+        (audioEl ? audioEl.duration : 0) | 0, 'sec');
+    }
 
     this.started = true;
     this.resume();
   }
 
   async stop() {
-    if (!this.started) return;
+    if (!this.started)
+      return;
     this.pause();
-    this.source.disconnect();
-    let tracks = this.stream.getTracks();
-    tracks.map(t => t.stop());
-    this.stream = null;
-    this.source = null;
+
+    if (this.source) {
+      this.source.disconnect();
+      this.source = null;
+    }
+
+    if (this.stream) {
+      let tracks = this.stream.getTracks();
+      tracks.map(t => t.stop());
+      this.stream = null;
+    }
+
     this.started = false;
     log.i('Audio stopped');
   }
@@ -189,6 +211,15 @@ export class AudioController {
   }
 
   captureFrame() {
-    this.analyser.getFloatTimeDomainData(this.waveform);
+    if (this.audioSamples) {
+      this.waveform.set(
+        this.audioSamples.subarray(
+          this.audioOffset,
+          this.audioOffset + this.waveform.length));
+      let delta = this.audioCtx.sampleRate / vargs.SHADER_FPS;
+      this.audioOffset += Math.max(1, delta | 0);
+    } else {
+      this.analyser.getFloatTimeDomainData(this.waveform);
+    }
   }
 }

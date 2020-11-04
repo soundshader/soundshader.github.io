@@ -10,6 +10,7 @@ export const SAMPLE_RATE = numarg('sr', 44.1);
 export const PLAYBACK_RATE = numarg('pbr', 1.0);
 export const IMAGE_SIZE = numarg('img', 1024);
 export const USE_MOUSE = numarg('mouse', 1);
+export const PRELOAD = numarg('preload', 0);
 
 export const ACF_COLOR_SCHEME = numarg('acf.cs', 2);
 export const ACF_EXP = numarg('acf.exp', 1.5);
