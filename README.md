@@ -47,6 +47,16 @@ conventional music    | a bird song
 
 Looking at the first example, we can tell that there are 5 prominent peaks in a 20 ms sound sample, which corresponds to 250 Hz. This means that our ears would necesserarily perceive this sound as a 250 Hz tone, regardless of what its spectrogram says. If it was a pure 250 Hz tone, we'd see perfectly round shapes of the `r = cos(250Hz * t)` line, but it's not the case here: we see that the 5 peaks are modulated with small wavelets: there is one big wavelet in the middle (which consists of 3 smaller wavelets) and 4 smaller wavelets. Our ears would hear the big wavelet as the 2nd harmonic of the 250 Hz tone (i.e. it would be a 500 Hz tone with a smaller amplitude) and the 4 small wavelets as the 5th harmonic (1000 Hz) at barely discernible volume. In addition to that, the 500 Hz harmonic is also modulated by the 3 tiny wavelets, which means we'd hear a 1500 Hz tone, almost inaudible. We can say all this without even looking at the spectrogram or hearing the sound.
 
+# How I came up with this idea
+
+Music is a temporal ornament. There are many types of ornaments, e.g. the 17 types of wallpaper tesselations, but few of them look like music. However there is one particular type of ornament that resembles music a lot - I mean those "mandala" images. I don't know how and why those are produced, but I noticed a connection between those images and music:
+
+- The 1st obvious observation is that a mandala is drawn in polar coordinates and is `2*PI` periodic. Sound is periodic too, so I thought the two facts are related.
+- The 2nd observation is that patterns on those images evolve over the radial axis. Ans so is music is a sequence of evolving sound patterns.
+- The 3rd observation is that a `2*PI` periodic function trivially corresponds to a set of frequencies. We usually use FFT to extract the frequencies and another FFT to restore the `2*PI` periodic function. Thus, a single radial slice of a mandala could encode a set of frequencies. If this is correct, a mandala is effectively an old school vinyl disk.
+
+Putting these observations together we naturally arrive with the ACF idea.
+
 # Questions?
 
 Open an issue on github or shoot me a email at ssgh@aikh.org
