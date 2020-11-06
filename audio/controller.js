@@ -4,6 +4,7 @@ import { GpuContext } from "../webgl/gpu-context.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuSpectrogramProgram } from "../glsl/spectrogram.js";
 import { GpuAcfVisualizerProgram } from '../glsl/acf-visualizer.js';
+import { GpuAcf3VisualizerProgram } from '../glsl/acf3-visualizer.js';
 import { GpuWaveformProgram as GpuAcfAnalyzerProgram } from '../glsl/acf-analyzer.js';
 
 // Uses WebAudio's getFloatTimeDomainData() to read the raw audio samples
@@ -77,6 +78,7 @@ export class AudioController {
       acf: GpuAcfVisualizerProgram,
       fft: GpuSpectrogramProgram,
       acfa: GpuAcfAnalyzerProgram,
+      acf3: GpuAcf3VisualizerProgram,
     }[vargs.SHADER];
 
     if (!ctor) throw new Error('Unknown visualizer id: ' + vargs.SHADER);

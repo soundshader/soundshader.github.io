@@ -149,13 +149,30 @@ export class FFT {
       res[i] *= n_rsqrt;
   }
 
+  static revidx(size) {
+    let revidx = FFT.revidxcache.get(size);
+    if (revidx) return revidx;
+
+    revidx = new Int32Array(size);
+    FFT.revidxcache.set(size, revidx);
+
+    for (let k = 0; k < size; k++) {
+      let r = 0;
+      for (let i = 0; 2 ** i < size; i++)
+        r = (r << 1) | (k >> i) & 1;
+      revidx[k] = r;
+    }
+
+    return revidx;
+  }
+
   constructor(size, { webgl } = {}) {
     if (!Number.isFinite(size) || size < 2 || (size & (size - 1)))
       throw new Error('FFT: ' + size + ' != 2**k');
 
     this.size = size;
     this.webgl = webgl;
-    this.revidx = new Int32Array(size);
+    this.revidx = FFT.revidx(size);
     this.uroots = !this.webgl && new Float32Array(2 * size);
 
     if (this.uroots) {
@@ -165,13 +182,6 @@ export class FFT {
         this.uroots[2 * k] = Math.cos(a);
         this.uroots[2 * k + 1] = Math.sin(a);
       }
-    }
-
-    for (let k = 0; k < size; k++) {
-      let r = 0;
-      for (let i = 0; 2 ** i < size; i++)
-        r = (r << 1) | (k >> i) & 1;
-      this.revidx[k] = r;
     }
 
     if (webgl) {
@@ -265,39 +275,32 @@ export class FFT {
 }
 
 FFT.instances = new Map; // FF doesn't support static fields
+FFT.revidxcache = new Map;
 
 export class GpuFFT extends GpuTransformProgram {
-  constructor(webgl, { size, revidx }) {
+  constructor(webgl, { size, width, height, layout }) {
     super(webgl);
 
-    // FFT size = width * height, i.e. FFT input
-    // with 1M (re, im) pairs is represented as a
-    // 1024 x 1024 texture with 2 channels.
-    let width = 2 ** Math.ceil(Math.log2(size) / 2);
-    let height = 2 ** Math.floor(Math.log2(size) / 2);
+    if (size) {
+      // FFT size = width * height, i.e. FFT input
+      // with 1M (re, im) pairs is represented as a
+      // 1024 x 1024 texture with 2 channels.
+      width = 2 ** Math.ceil(Math.log2(size) / 2);
+      height = 2 ** Math.floor(Math.log2(size) / 2);
+    }
 
+    this.webgl = webgl;
     this.size = size;
     this.width = width;
     this.height = height;
+    this.layout = layout;
 
     this.texture1 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
     this.texture2 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
 
-    let revidx2d = new Int32Array(size * 2);
-
-    for (let i = 0; i < size; i++) {
-      let s = revidx[i];
-      revidx2d[2 * i + 0] = s % width | 0;
-      revidx2d[2 * i + 1] = s / width | 0;
-    }
-
-    this.texRevIdx = new GpuFrameBuffer(webgl, {
-      width,
-      height,
-      channels: 2,
-      // TODO: Upload this data to GPU only once.
-      source: new Float32Array(revidx2d),
-    });
+    this.texRevIdx = !layout ?
+      this.initTexRevIdxCompact() :
+      this.initTexRevIdxFlat();
 
     this.init({
       fshader: `
@@ -305,8 +308,12 @@ export class GpuFFT extends GpuTransformProgram {
 
         const int TW = ${width};
         const int TH = ${height};
-        const int N = TW * TH;
+        const ivec2 WH = ivec2(TW, TH);
         const float PI = ${Math.PI};
+        const int N = 
+          ${layout == 'rows'} ? TW : 
+          ${layout == 'cols'} ? TH :
+          TW * TH;
 
         uniform sampler2D uInput;
         uniform int uScale; // 2, 4, 8, .., n
@@ -317,10 +324,20 @@ export class GpuFFT extends GpuTransformProgram {
           return vec2(cos(w), sin(w));
         }
 
+        int eindex(ivec2 vTexN) {
+          if (${layout == 'rows'}) return vTexN.x;
+          if (${layout == 'cols'}) return vTexN.y;
+          return vTexN.x + TW * vTexN.y;
+        }
+
+        ivec2 ecoords(int i) {
+          if (${layout == 'rows'}) return ivec2(i, int(vTex.y * float(TH) - 0.5));
+          if (${layout == 'cols'}) return ivec2(int(vTex.x * float(TW) - 0.5), i);
+          return ivec2(i % TW, i / TW);
+        }
+
         vec2 element(int i) {
-          int x = i % TW;
-          int y = i / TW;
-          return texelFetch(uInput, ivec2(x, y), 0).xy;
+          return texelFetch(uInput, ecoords(i), 0).xy;
         }
 
         vec2 multiply(vec2 u, vec2 v) {
@@ -330,8 +347,7 @@ export class GpuFFT extends GpuTransformProgram {
         }
 
         void main() {
-          vec2 vTexN = vTex * vec2(float(TW), float(TH)) - 0.5;
-          int i = int(vTexN.x) + TW * int(vTexN.y); // 0..N-1
+          int i = eindex(ivec2(vTex * vec2(WH) - 0.5));
           int s = uScale;
           int j = i / s;
           int k = i % (s / 2);
@@ -356,9 +372,20 @@ export class GpuFFT extends GpuTransformProgram {
         uniform sampler2D uInput;
         uniform sampler2D uRevIdx;
 
+        const vec2 N_WH = vec2(${width}.0, ${height}.0);
+
+        ivec2 revidx(int x, int y) {
+          vec4 t = texelFetch(uRevIdx, ivec2(x, y), 0);
+          return ivec2(t.xy);
+        }
+
         void main() {
-          vec2 ptr = texture(uRevIdx, vTex).xy;
-          v_FragColor = texelFetch(uInput, ivec2(ptr), 0);
+          ivec2 r = ivec2(vTex * N_WH - 0.5);
+          ivec2 s =
+            ${layout == 'rows'} ? ivec2(revidx(r.x, 0).x, r.y) :
+            ${layout == 'cols'} ? ivec2(r.x, revidx(0, r.y).x) :
+            revidx(r.x, r.y);
+          v_FragColor = texelFetch(uInput, s, 0);
         }
       `,
     });
@@ -367,20 +394,19 @@ export class GpuFFT extends GpuTransformProgram {
     this.normalizer = new GpuTransformProgram(webgl, {
       fshader: `
         in vec2 vTex;
+
         uniform sampler2D uInput;
-        const float N_SQRT = float(${Math.sqrt(width * height)});
+        uniform float uNorm;
+
         void main() {
-          // it's really a vec2 with (re, im)
-          vec4 fft = texture(uInput, vTex);
-          v_FragColor = fft / N_SQRT;
+          vec4 reim = texture(uInput, vTex);
+          v_FragColor = reim * uNorm;
         }
       `,
     });
   }
 
   exec({ uInput }, output) {
-    let n = this.size;
-
     let tex1 = this.texture1;
     let tex2 = this.texture2;
 
@@ -397,20 +423,56 @@ export class GpuFFT extends GpuTransformProgram {
       uInput: tex,
       uRevIdx: this.texRevIdx,
     }, tex2);
-
     tex1.source = null;
 
+    let n = {
+      rows: this.width,
+      cols: this.height,
+    }[this.layout] || this.size;
+
     for (let s = 2; s <= n; s *= 2) {
-      [tex1, tex2] =
-        [tex2, tex1];
-      super.exec({
-        uScale: s,
-        uInput: tex1,
-      }, tex2);
+      [tex1, tex2] = [tex2, tex1];
+      super.exec({ uScale: s, uInput: tex1 }, tex2);
     }
 
     this.normalizer.exec({
       uInput: tex2,
+      uNorm: 1 / Math.sqrt(n),
     }, output || (this.output = tex1));
+  }
+
+  initTexRevIdxCompact() {
+    let webgl = this.webgl;
+    let size = this.size;
+    let width = this.width;
+    let height = this.height;
+    let revidx = FFT.revidx(size);
+    let revidx2d = new Int32Array(size * 2);
+
+    for (let i = 0; i < size; i++) {
+      let s = revidx[i];
+      revidx2d[2 * i + 0] = s % width | 0;
+      revidx2d[2 * i + 1] = s / width | 0;
+    }
+
+    return new GpuFrameBuffer(webgl, {
+      width,
+      height,
+      channels: 2,
+      source: new Float32Array(revidx2d),
+    });
+  }
+
+  initTexRevIdxFlat() {
+    let webgl = this.webgl;
+    let n = this.layout == 'rows' ?
+      this.width : this.height;
+    let revidx = FFT.revidx(n);
+
+    return new GpuFrameBuffer(webgl, {
+      width: this.layout == 'rows' ? n : 1,
+      height: this.layout == 'cols' ? n : 1,
+      source: new Float32Array(revidx),
+    });
   }
 }

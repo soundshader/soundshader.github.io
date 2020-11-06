@@ -20,6 +20,7 @@ export const ACF_ZOOM = numarg('acf.zoom', 5.0);
 export const ACF_MAX_SIZE = numarg('acf.max', 2048);
 export const ACF_COORDS = numarg('acf.coords', 0);
 export const ACF_SIGMA = numarg('acf.sig', 3.0);
+export const ACF_DECAY = numarg('acf.decay', 3.0);
 export const ACF_A_WEIGHT = numarg('acf.aweight', 0.0);
 export const ACF_RGB_1 = strarg('acf.c1', '4,2,1');
 export const ACF_RGB_2 = strarg('acf.c2', '1,2,4');

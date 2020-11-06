@@ -94,3 +94,15 @@ export const textureUtils = `
     return mix(t0, t1, s.x);
   }
 `;
+
+export const complexMath = `
+  vec2 imul(vec2 a, vec2 b) {
+    float re = a.x * b.x - a.y * b.y;
+    float im = a.x * b.y + a.y * b.x;
+    return vec2(re, im);
+  }
+
+  vec2 iconj(vec2 a) {
+    return vec2(a.x, -a.y);
+  }
+`;
