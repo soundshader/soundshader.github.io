@@ -290,7 +290,6 @@ export class GpuFFT extends GpuTransformProgram {
     }
 
     this.webgl = webgl;
-    this.size = size;
     this.width = width;
     this.height = height;
     this.layout = layout;
@@ -396,11 +395,17 @@ export class GpuFFT extends GpuTransformProgram {
         in vec2 vTex;
 
         uniform sampler2D uInput;
-        uniform float uNorm;
+
+        const int TW = ${width};
+        const int TH = ${height};
+        const int N = 
+          ${layout == 'rows'} ? TW : 
+          ${layout == 'cols'} ? TH :
+          TW * TH;
 
         void main() {
           vec4 reim = texture(uInput, vTex);
-          v_FragColor = reim * uNorm;
+          v_FragColor = reim / sqrt(float(N));
         }
       `,
     });
@@ -425,25 +430,26 @@ export class GpuFFT extends GpuTransformProgram {
     }, tex2);
     tex1.source = null;
 
-    let n = {
-      rows: this.width,
-      cols: this.height,
-    }[this.layout] || this.size;
+    let n = this.width * this.height;
+    if (this.layout == 'rows') n = this.width;
+    if (this.layout == 'cols') n = this.height;
 
     for (let s = 2; s <= n; s *= 2) {
       [tex1, tex2] = [tex2, tex1];
-      super.exec({ uScale: s, uInput: tex1 }, tex2);
+      super.exec({
+        uScale: s,
+        uInput: tex1,
+      }, tex2);
     }
 
     this.normalizer.exec({
       uInput: tex2,
-      uNorm: 1 / Math.sqrt(n),
     }, output || (this.output = tex1));
   }
 
   initTexRevIdxCompact() {
     let webgl = this.webgl;
-    let size = this.size;
+    let size = this.width * this.height;
     let width = this.width;
     let height = this.height;
     let revidx = FFT.revidx(size);

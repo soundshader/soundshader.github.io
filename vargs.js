@@ -13,6 +13,7 @@ export const USE_MOUSE = numarg('mouse', 1);
 export const PRELOAD = numarg('preload', 0);
 
 export const ACF_COLOR_SCHEME = numarg('acf.cs', 2);
+export const ACF_POLAR = numarg('acf.polar', 1);
 export const ACF_EXP = numarg('acf.exp', 1.5);
 export const ACF_ABS_MAX = numarg('acf.absmax', 1.0);
 export const ACF_STATS = numarg('acf.stats', 0);
@@ -43,7 +44,9 @@ export const DEMO_ID = numarg('demo', 103952);
 console.groupEnd();
 
 function strarg(name, defval = '', regex = null) {
-  let value = args.get(name) || defval;
+  let value = args.get(name);
+  if (value === null)
+    value = defval;
   let info = 'URL arg ' + name + '=' + value;
   console.log(info);
   if (regex && !regex.test(value))

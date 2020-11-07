@@ -30,6 +30,7 @@ export class GpuAcf3VisualizerProgram {
     this.texImageB = new GpuFrameBuffer(webgl, { size, channels: 4 });
 
     log.i('ACF3 config:', size);
+    this.statsTime = 0;
   }
 
   exec({ uWaveFormRaw, uMousePos }, output) {
@@ -44,7 +45,7 @@ export class GpuAcf3VisualizerProgram {
         uData: this.texBispectrum,
       }, this.texStats);
 
-      // log.i('ACF3 stats:', this.texStats.download());
+      this.logStats();
 
       this.colorizer.exec({
         uFlat: this.flat,
@@ -67,6 +68,19 @@ export class GpuAcf3VisualizerProgram {
         uImage: this.texImageA,
       }, output);
     }
+  }
+
+  logStats() {
+    let dt = vargs.ACF_STATS * 1e3;
+    if (!dt || Date.now() < this.statsTime + dt)
+      return;
+    this.statsTime = Date.now();
+    let [min, max, avg, sig] = this.texStats.download();
+    log.i('ACF3 stats:',
+      'stddev', sig.toExponential(3),
+      'avg', (avg / sig).toFixed(1) + 's',
+      'min', (min / sig).toFixed(1) + 's',
+      'max', (max / sig).toFixed(1) + 's');
   }
 }
 
@@ -93,6 +107,17 @@ class GpuACF3 {
       `,
     });
 
+    this.sqrabs = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+        uniform sampler2D uInput;
+        void main() {
+          vec2 u = texture(uInput, vTex).xy;
+          v_FragColor = vec4(dot(u, u), 0.0, 0.0, 0.0);
+        }
+      `,
+    });    
+
     this.scalar = new GpuTransformProgram(webgl, {
       fshader: `
         in vec2 vTex;
@@ -102,7 +127,23 @@ class GpuACF3 {
 
         void main() {
           vec2 u = texture(uInput, vTex).xy;
-          v_FragColor = vec4(dot(u, uZ), 0.0, 0.0, 0.0);
+          float a = dot(u, uZ);
+          v_FragColor = vec4(a, 0.0, 0.0, 0.0);
+        }
+      `,
+    });
+
+    this.diff = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+
+        uniform sampler2D uA;
+        uniform sampler2D uB;
+
+        void main() {
+          vec4 a = texture(uA, vTex);
+          vec4 b = texture(uB, vTex);
+          v_FragColor = a - b;
         }
       `,
     });
@@ -111,16 +152,17 @@ class GpuACF3 {
       fshader: `
         in vec2 vTex;
         uniform sampler2D uFFT;
-        const float N = ${size}.0;
+        const int N = ${size};
 
         ${complexMath}
 
         vec2 fft(int k) {
-          return texelFetch(uFFT, ivec2(k, 0), 0).xy;
+          float x = (float(k) - 0.5) / float(N);
+          return texture(uFFT, vec2(x, 0.0)).xy;
         }
 
         void main() {
-          ivec2 r = ivec2(vTex * N - 0.5);
+          ivec2 r = ivec2(vTex * float(N) - 0.5);
 
           vec2 rx = fft(r.x);
           vec2 ry = fft(r.y);
@@ -138,6 +180,7 @@ class GpuACF3 {
       throw new Error('ACF3 output must be a NxN buffer');
     if (uWaveFormRaw.length != this.size)
       throw new Error('ACF3 waveform must have N samples');
+
     this.wave1.source = uWaveFormRaw;
     this.fft.exec({ uInput: this.wave1 }, this.wave2);
     this.bispectrum.exec({ uFFT: this.wave2 }, this.img1);
@@ -187,9 +230,14 @@ class GpuColorizer extends GpuTransformProgram {
         }
 
         vec4 rgba(vec2 vTex) {
-          float r = length(v);
-          float a = atan(v.y, v.x) / PI * 0.5;
-          float h = h_acf(vec2(r, a));
+          if (${!vargs.ACF_POLAR}) {
+            vTex -= vec2(0.5);
+          } else {
+            float r = length(v);
+            float a = atan(v.y, v.x) / PI * 0.5 - 0.25;
+            vTex = vec2(r, a);
+          }
+          float h = h_acf(vTex);
           return hcolor_${vargs.ACF_COLOR_SCHEME}(h);
         }
 
