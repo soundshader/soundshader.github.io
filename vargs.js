@@ -12,7 +12,11 @@ export const IMAGE_SIZE = numarg('img', 1024);
 export const USE_MOUSE = numarg('mouse', 1);
 export const PRELOAD = numarg('preload', 0);
 
-export const ACF_COLOR_SCHEME = numarg('acf.cs', 2);
+export const ACF_COLOR_SCHEME = numarg('acf.cs', 1);
+export const ACF_SMODE = strarg('acf.smode');
+export const ACF_AGRAD = numarg('acf.agrad', 0);
+export const ACF_TGRAD = numarg('acf.tgrad', 0);
+export const ACF_R0 = numarg('acf.r0', 0.0);
 export const ACF_POLAR = numarg('acf.polar', 1);
 export const ACF_EXP = numarg('acf.exp', 1.5);
 export const ACF_ABS_MAX = numarg('acf.absmax', 1.0);
@@ -39,7 +43,7 @@ export const FBO_MAX_SIZE = numarg('fbo.max', 27);
 export const SHOW_LOGS = numarg('log', 1);
 export const FLOAT_PRECISION = strarg('fp', 'highp');
 export const INT_PRECISION = strarg('ip', 'highp');
-export const DEMO_ID = numarg('demo', 103952);
+export const DEMO_ID = numarg('demo', 330891);
 
 console.groupEnd();
 

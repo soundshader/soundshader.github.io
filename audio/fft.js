@@ -1,11 +1,7 @@
-// Cooley-Tukey FFT algorithm.
-//
-// This JS implementation is fast enough to be usable,
-
 import { GpuTransformProgram } from "../webgl/transform.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 
-// but could be be made a lot faster with WASM or GLSL.
+// Cooley-Tukey FFT algorithm.
 export class FFT {
   static get(size) {
     let fft = FFT.instances.get(size);

@@ -1,10 +1,10 @@
 import * as log from '../log.js';
-import { FFT } from "../audio/fft.js";
+import * as vargs from "../vargs.js";
+import { GpuFFT } from "../audio/fft.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
 import { textureUtils, shaderUtils, colorUtils } from "./basics.js";
 import { GpuStatsProgram } from "./stats.js";
-import * as vargs from "../vargs.js";
 import { GpuDownsampler } from './downsampler.js';
 
 export class GpuAcfVisualizerProgram {
@@ -109,26 +109,11 @@ export class GpuAcfVisualizerProgram {
 class GpuACF {
   constructor(webgl, { size }) {
     this.size = size;
-    this.fft = new FFT(size, { webgl });
-
-    let width = this.fft.shader.width;
-    let height = this.fft.shader.height;
-
+    this.fft = new GpuFFT(webgl, { width: 1, height: size });
     this.temp = new Float32Array(size * 2);
-    this.temp0 = new GpuFrameBuffer(webgl, { width, height });
-    this.temp1 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
-    this.temp2 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
-
-    this.expand = new GpuTransformProgram(webgl, {
-      fshader: `
-        in vec2 vTex;
-        uniform sampler2D uInput;
-        void main() {
-          float re = texture(uInput, vTex).x;
-          v_FragColor = vec4(re, 0.0, 0.0, 0.0);
-        }
-      `,
-    });
+    this.temp0 = new GpuFrameBuffer(webgl, { width: 1, height: size, channels: 1 });
+    this.temp1 = new GpuFrameBuffer(webgl, { width: 1, height: size, channels: 2 });
+    this.temp2 = new GpuFrameBuffer(webgl, { width: 1, height: size, channels: 2 });
 
     this.sqrabs = new GpuTransformProgram(webgl, {
       fshader: `
@@ -138,7 +123,11 @@ class GpuACF {
 
         void main() {
           vec2 z = texture(uInput, vTex).xy;
-          v_FragColor = vec4(dot(z, z), 0.0, 0.0, 0.0);
+          float d =
+            ${vargs.ACF_SMODE == 'x'} ? z.x * z.x :
+            ${vargs.ACF_SMODE == 'y'} ? z.y * z.y :
+            dot(z, z);
+          v_FragColor = vec4(d, 0.0, 0.0, 0.0);
         }
       `,
     });
@@ -184,48 +173,21 @@ class GpuACF {
         void main() {
           float f = freq_abs(vTex);
           float a = a_weight(f);
-          float w = pow(10.0, a / 20.0 * float(${vargs.ACF_A_WEIGHT}));
+          float w = pow(10.0, a / 10.0 * float(${vargs.ACF_A_WEIGHT}));
           v_FragColor = texture(uInput, vTex) * w;
-        }
-      `,
-    });
-
-    this.justre = new GpuTransformProgram(webgl, {
-      fshader: `
-        in vec2 vTex;
-        uniform sampler2D uInput;
-        void main() {
-          float re = texture(uInput, vTex).x;
-          v_FragColor = vec4(re, 0.0, 0.0, 0.0);
-        }
-      `,
-    });
-
-    this.reshape = new GpuTransformProgram(webgl, {
-      fshader: `
-        in vec2 vTex;
-
-        uniform sampler2D uInput;
-
-        void main() {
-          ivec2 size = textureSize(uInput, 0);
-          int i = int(vTex.y * float(size.x * size.y) - 0.5);
-          int x = i % size.x;
-          int y = i / size.x;
-          v_FragColor = texelFetch(uInput, ivec2(x, y), 0);
         }
       `,
     });
   }
 
   exec({ uWaveFormRaw }, uACF) {
-    if (uACF.width != 1 || uACF.height != this.size)
+    if (uACF.width != 1 || uACF.height != this.size || uACF.channels != 1)
       throw new Error('ACF output must be a 1xN buffer');
     if (uWaveFormRaw.length != this.size)
       throw new Error('ACF waveform must have N samples');
+
     this.temp0.source = uWaveFormRaw;
-    this.expand.exec({ uInput: this.temp0 }, this.temp1);
-    this.fft.transform(this.temp1, this.temp2);
+    this.fft.exec({ uInput: this.temp0 }, this.temp2);
     this.sqrabs.exec({ uInput: this.temp2 }, this.temp1);
 
     if (vargs.ACF_A_WEIGHT > 0) {
@@ -236,9 +198,7 @@ class GpuACF {
     // In general, ACF[X] needs to do inverseFFT[S]
     // here, but since S is real and ACF[X] is also
     // real, inverseFFT here is equivalent to FFT.
-    this.fft.transform(this.temp1, this.temp2);
-    this.justre.exec({ uInput: this.temp2 }, this.temp1);
-    this.reshape.exec({ uInput: this.temp1 }, uACF);
+    this.fft.exec({ uInput: this.temp1 }, uACF);
   }
 }
 
@@ -257,6 +217,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
 
         const float N = float(${size});
         const float PI = ${Math.PI};
+        const float R0 = float(${vargs.ACF_R0});
 
         ${shaderUtils}
         ${textureUtils}
@@ -294,27 +255,27 @@ class GpuHeightMapProgram extends GpuTransformProgram {
           return (h2 - h1) * 0.5 * N;
         }
 
+        float h_value(vec2 ta) {
+          if (${vargs.ACF_AGRAD > 0})
+            return a_grad(ta);
+          if (${vargs.ACF_TGRAD > 0})
+            return t_grad(ta);
+          return h_acf(ta);
+        }
+
         float fetch_0() {
-          float r = length(v);
+          float r = abs(length(v) - R0);
           float t = 1.0 - r / uZoom;
-
-          if (r < 0.5/N || r > 1.0 - 0.5/N || t < 0.5/N)
-            return 0.0;
-
           float arg = atan2(v.y, v.x);
           float a = -0.25 + 0.5 * arg / PI;
-          return h_acf(vec2(t, a));
+          return h_value(vec2(t, a));
         }
 
         float fetch_1() {
           float r = 1.0 - vTex.y;
           float t = 1.0 - r / uZoom;
-
-          if (r < 0.5/N || r > 1.0 - 0.5/N || t < 0.5/N)
-            return 0.0;
-
           float a = vTex.x - 0.5;
-          return h_acf(vec2(t, a));
+          return h_value(vec2(t, a));
         }
 
         void main () {

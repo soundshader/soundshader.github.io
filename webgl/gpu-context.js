@@ -58,12 +58,6 @@ export class GpuContext {
 
     let gl = canvas.getContext('webgl2', params);
     if (!gl) throw new Error('WebGL 2.0 not available');
-
-    if (!gl) {
-      log.w('getContext("webgl") blocked by getContext("2d")?');
-      throw new Error('Cannot get WebGL context');
-    }
-
     log.i('WebGL v' + gl.VERSION);
 
     let fsprec = (fp) => gl.getShaderPrecisionFormat(
@@ -75,7 +69,7 @@ export class GpuContext {
       'int=' + vargs.INT_PRECISION);
 
     gl.getExtension('EXT_color_buffer_float');
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
 
     let floatTexType = gl.FLOAT;
     let formatRGBA = this.getSupportedFormat(gl, gl.RGBA32F, gl.RGBA, floatTexType);
