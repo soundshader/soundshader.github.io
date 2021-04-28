@@ -1,0 +1,22 @@
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#fft {
+  width: 100%;
+  height: 25%;
+  background: #fee;
+}
+
+#spectrum {
+  width: 100%;
+  height: 25%;
+}
+
+#image {
+  width: 100%;
+  height: 50%;
+}

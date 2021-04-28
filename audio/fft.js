@@ -66,9 +66,15 @@ export class FFT {
   }
 
   static sqr_abs(src, res) {
-    res = FFT.abs(src);
-    for (let i = 0; i < res.length; i++)
-      res[i] *= res[i];
+    let n = src.length / 2;
+    res = res || src.slice(0, n);
+
+    for (let i = 0; i < n; i++) {
+      let re = src[2 * i];
+      let im = src[2 * i + 1];
+      res[i] = re * re + im * im;
+    }
+
     return res;
   }
 
