@@ -1,35 +1,51 @@
 import * as log from '../log.js';
 import { FFT } from '../audio/fft.js';
 
+const ARGS = new URLSearchParams(location.search);
+
+const SAMPLE_RATE = 48000;
 const FFT_SIZE = 1024;
-const FFT_FMAX = 512;
-const AMP2_LOG = 0.25; // 10**(-1/AMP2_LOG) = the min non zero amp2
-const FBIN_MUL = 5;
-const HW_LEN = 15;
-const SPEC_BINS = 512;
+const NUM_FRAMES = 1024;
+// On 48 kHz audio, FFT_SIZE/2 bins maps to 24 kHz.
+// This is also the max possible value: FFT can't
+// detect frequencies higher than FFT_SIZE/2.
+let fftMax = +ARGS.get('fmax') || 256;
+// 0.2 means the 0..255 rgba range maps to 1e-5..1.0.
+// This seems excessive, but ear is able to hear the
+// 1e-5 signal clearly. Can be tested on bird songs.
+const AMP2_LOG = 0.2;
 
 const $ = s => document.querySelector(s);
 const sleep = dt => new Promise(resolve => setTimeout(resolve, dt));
+const clamp = (x, min = 0, max = 1) => x < min ? min : x > max ? max : x;
+const fract = (x) => x - Math.floor(x);
+const mix = (min, max, x) => min * (1 - x) + max * x;
 
+const vTimeBar = $('#vtimebar');
 const canvasFFT = $('#fft');
-const canvasSpectrum = $('#spectrum');
-const canvasImage = $('#image');
-const audio = $('audio');
-const fft = FFT.get(FFT_SIZE);
-const numFrames = canvasFFT.width;
-const fftSqrAmp = new Float32Array(FFT_SIZE / 2 * numFrames);
-const fbins = new Int32Array(FFT_FMAX * SPEC_BINS);
+const fft = new FFT(FFT_SIZE);
+const fftSqrAmp = new Float32Array(FFT_SIZE * NUM_FRAMES);
+const rgba_data = new Uint8ClampedArray(FFT_SIZE * NUM_FRAMES * 4);
 
-canvasFFT.height = FFT_FMAX;
-canvasSpectrum.width = FFT_FMAX;
-canvasSpectrum.height = SPEC_BINS;
+canvasFFT.height = FFT_SIZE;
+canvasFFT.width = NUM_FRAMES;
 
+let audioCtx = null;
+let abuffer = null;
 let audio32 = null;
 let aviewport = { min: 0, len: 0 };
-let sdrawing = false;
+let fftCToken = { cancelled: false };
+let audioCtxStartTime = 0;
+let vTimeBarAnimationId = 0;
+let usePolarCoords = false;
+let fftSqrAmpPos = 0; // NUM_FRAMES starting from here in abuffer.
+let fftSqrAmpLen = 0;
 
-function clamp(x, min = 0, max = 1) {
-  return x < min ? min : x > max ? max : x;
+function assert(x) {
+  if (!x) {
+    debugger;
+    throw new Error('assert() failed');
+  }
 }
 
 async function selectAudioFile() {
@@ -37,7 +53,7 @@ async function selectAudioFile() {
   input.type = 'file';
   input.accept = 'audio/mpeg; audio/wav; audio/webm';
   input.click();
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     input.onchange = () => {
       let files = input.files || [];
       resolve(files[0] || null);
@@ -58,21 +74,24 @@ function getPaddedSlice(src, min, max,
   return res;
 }
 
-function getAmp2LogVal(amp2) {
+function getLoudness(amp2) {
   return !amp2 ? 0 : clamp(Math.log10(amp2) * AMP2_LOG + 1.0);
 }
 
-async function renderFFT() {
-  let f32data = audio32.subarray(aviewport.min, aviewport.min + aviewport.len);
-  log.i('Input audio:', f32data.length, 'float32 samples');
+async function renderFFT(ctoken = fftCToken) {
   let n = FFT_SIZE;
+  let ns = FFT_SIZE / fftMax;
+  let f32data = audio32.subarray(aviewport.min, aviewport.min + aviewport.len + n);
+  let s2t = k => (k / audio32.length * abuffer.duration | 0) + 's';
+
   let cw = canvasFFT.width;
   let ch = canvasFFT.height;
-  let dist = f32data.length / cw;
-  log.i('FFT:', cw, 'frames', 'x', n, 'freq bins');
-  log.i('FFT overlapping:', (n - dist) | 0, 'samples',
-    '=', (1 - dist / n) * 100 | 0, '% per frame');
-  if (cw * n < f32data.length)
+  let step = aviewport.len / cw;
+  log.i('FFT input:', s2t(aviewport.len),
+    'at', s2t(aviewport.min), 'out of', s2t(audio32.length), 'total;',
+    cw, 'frames', 'x', n, 'freq bins', 'x', ns, 'shifted inter-layers;',
+    'step', step | 0);
+  if (cw * n < aviewport.len)
     log.w('Too much audio data: spectrogram will be sparse');
 
   let tprev = Date.now();
@@ -80,178 +99,178 @@ async function renderFFT() {
   let image = ctx2d.getImageData(0, 0, cw, n);
   let input1 = new Float32Array(n);
   let input2 = new Float32Array(n * 2); // (re, im), im = 0
+  let input3 = new Float32Array(n * 2); // input2 shifted
   let output = new Float32Array(n * 2);
   let ampsqr = new Float32Array(n); // |FFT[i]|^2
+  let xmin = 0, xmax = cw - 1;
 
-  fftSqrAmp.fill(0);
+  if (fftSqrAmpLen != aviewport.len) {
+    fftSqrAmp.fill(0);
+  } else {
+    let s = (aviewport.min - fftSqrAmpPos) / step | 0;
+    let a = fftSqrAmp;
+    if (s > 0) {
+      // a shl s
+      a.set(a.subarray(s * n), 0);
+      xmin = s;
+    } else if (s < 0) {
+      // a shr s
+      a.set(a.subarray(0, s * n), -s * n);
+      xmax = -s;
+    }
+  }
 
-  for (let x = 0; x < cw; x++) {
-    let offset = x * dist | 0;
+  fftSqrAmpPos = aviewport.min;
+  fftSqrAmpLen = aviewport.len;
+
+  for (let x = xmin; x <= xmax; x++) {
+    let offset = x * step | 0;
     getPaddedSlice(f32data, offset, offset + n, input1);
+    let frame = fftSqrAmp.subarray(x * n, x * n + n);
     FFT.expand(input1, input2);
-    fft.transform(input2, output);
-    FFT.sqr_abs(output, ampsqr);
-    fftSqrAmp.set(ampsqr.subarray(0, n / 2), x * n / 2);
 
-    for (let y = 0; y < ch; y++) {
-      let b = (y * cw + x) * 4;
-      let d = image.data;
-      let a = ampsqr[ch - y - 1];
-      let q = (1 - getAmp2LogVal(a)) * 256;
-      d[b + 0] = q;
-      d[b + 1] = q;
-      d[b + 2] = q;
-      d[b + 3] = 256;
+    // This is called shifted DFT. Normal DFT with 1024 bins
+    // on a 48 kHz input has a max resolution of 1024/48000 s.
+    // or 47 Hz per bin. One way to get higher resolution is
+    // to use CWT. Another way is to use the DFT Shift Theorem:
+    // multiplying the input by the exp(i*pi/2*k/n) function
+    // and applying DFT on it yields the original
+    // DFT shifted by half-bin or 25 Hz. This can be repeated
+    // to shift DFT by 1/4-th bin and so on. Assembling the
+    // shifted DFTs gets a result almost identical to CWT.
+    for (let s = 0; s < ns; s++) {
+      FFT.shift(input2, input3, -s / ns);
+      fft.transform(input3, output);
+      FFT.sqr_abs(output, ampsqr);
+      for (let i = 0; i < fftMax; i++)
+        frame[i * ns + s] = ampsqr[i];
     }
 
-    if (Date.now() > tprev + 1000) {
-      ctx2d.putImageData(image, 0, 0);
-      log.i('FFT progress:', x / cw * 100 | 0, '%');
-      await sleep(10);
+    if (Date.now() > tprev + 150) {
+      log.v('FFT progress:', x / cw * 100 | 0, '%');
+      await sleep(0);
       tprev = Date.now();
+      if (ctoken.cancelled)
+        return;
     }
   }
 
-  log.i('Done rendering FFT');
-  ctx2d.putImageData(image, 0, 0);
-}
+  for (let x = 0; x < cw; x++) {
+    let frame = fftSqrAmp.subarray(x * n, x * n + n);
+    let hue = getSpectrumColor(frame); // 0..1
+    let maxamp2 = 0;
 
-function getAudioFrame(afid) {
-  let n2 = FFT_SIZE / 2;
-  let offset = afid * n2;
-  let ampsqr = fftSqrAmp.subarray(offset, offset + n2);
-  if (ampsqr.length != n2)
-    throw new Error('Invalid ampsqr size: ' + ampsqr.length + ' at x=' + afid);
-  return ampsqr;
-}
+    for (let y = 0; y < frame.length; y++)
+      maxamp2 = Math.max(maxamp2, frame[y]);
 
-function renderSpectrum(frameFrom = 0, frameTo = -1) {
-  log.i(`Rendering spectrum: frames ${frameFrom}..${frameTo}`);
-  if (frameTo < 0)
-    frameTo += numFrames;
-  if (frameFrom < 0)
-    frameFrom += numFrames;
+    for (let y = 0; y < ch; y++) {
+      let amp2 = frame[ch - y - 1];
+      let vol = getLoudness(amp2);
+      let sat = 1 - amp2 / maxamp2;
+      let [r, g, b] = hsv2rgb(hue, sat, vol);
 
-  let n2 = FFT_SIZE / 2;
-  let cw = canvasSpectrum.width;
-  let ch = canvasSpectrum.height;
-  log.i(`Spectrum window: ${cw} freq bins, ${ch} amp2 bins`);
+      let offset = (y * cw + x) * 4;
+      rgba_data[offset + 0] = vol * r * 255;
+      rgba_data[offset + 1] = vol * g * 255;
+      rgba_data[offset + 2] = vol * b * 255;
+      rgba_data[offset + 3] = 255;
+    }
+  }
 
-  // Pick only the first cw freq bins.
-  if (cw > n2)
-    throw new Error('Spectrum canvas is too wide: ' + cw + ' > ' + n2);
-
-  fbins.fill(0);
-  for (let fid = frameFrom; fid <= frameTo; fid++) {
-    let frame = getAudioFrame(fid);
+  if (!usePolarCoords) {
+    image.data.set(rgba_data);
+  } else {
     for (let x = 0; x < cw; x++) {
-      let s = frame[x];
-      s = getAmp2LogVal(s);
-      let y = clamp(s, 0, 1) * ch | 0;
-      fbins[y * cw + x]++;
-    }
-  }
-
-  let ctx2d = canvasSpectrum.getContext('2d');
-  let image = ctx2d.getImageData(0, 0, cw, ch);
-
-  for (let x = 0; x < cw; x++) {
-    for (let y = 0; y < ch; y++) {
-      let s = fbins[y * cw + x];
-      // s = Math.log(1 + s) / Math.log(cw * ch) * FBIN_MUL;
-      s = s / ch * 5 * FBIN_MUL;
-      let b = ((ch - 1 - y) * cw + x) * 4;
-      let q = (1 - clamp(s)) * 256 | 0;
-      image.data[b + 0] = q;
-      image.data[b + 1] = q;
-      image.data[b + 2] = q;
-      image.data[b + 3] = 256;
+      for (let y = 0; y < ch; y++) {
+        let dx = 2 * x / cw - 1;
+        let dy = 2 * y / cw - 1;
+        let a = Math.atan2(dx, -dy) / Math.PI * 0.5 + 0.5; // 0..1
+        let r = Math.hypot(dx, dy); // 0..1
+        a = Math.abs(a - 0.5) * 2;
+        r = 1 - Math.abs(r - 0.25);
+        let sx = clamp(a) * cw | 0;
+        let sy = clamp(r) * ch | 0;
+        let src = (sy * cw + sx) * 4;
+        let res = (y * cw + x) * 4;
+        image.data[res + 0] = rgba_data[src + 0];
+        image.data[res + 1] = rgba_data[src + 1];
+        image.data[res + 2] = rgba_data[src + 2];
+        image.data[res + 3] = rgba_data[src + 3];
+      }
     }
   }
 
   ctx2d.putImageData(image, 0, 0);
-  log.i('Done rendering spectrum');
 }
 
-function pdraw(canvas, weights = [1, 1, 1], clevel = 1, zoom = 5) {
-  let cw = canvas.width;
-  let ch = canvas.height; 5
-  let ctx = canvas.getContext('2d');
-  let img = ctx.getImageData(0, 0, cw, ch);
-
-  for (let x = 0; x < cw; x++) {
-    for (let y = 0; y < ch; y++) {
-      let cx = x / cw - 0.5;
-      let cy = y / ch - 0.5;
-      let pv = peval(weights, cy * zoom, cx * zoom);
-      let color = pv < clevel ? 0 : 255;
-      let offset = 4 * (x + cw * (ch - 1 - y));
-      img.data[offset + 0] = color;
-      img.data[offset + 1] = color;
-      img.data[offset + 2] = color;
-      img.data[offset + 3] = 255;
-    }
+function getSpectrumColor(frame) {
+  assert(frame.length == FFT_SIZE);
+  let s = 0, t = 0;
+  for (let i = 0; i < frame.length; i++) {
+    let v = getLoudness(frame[i]);
+    t += v;
+    s += i * v;
   }
-
-  ctx.putImageData(img, 0, 0);
+  return s / t / frame.length; // * fftMax / FFT_SIZE * 2;
 }
 
-// weights[k] * (cx + i*cy)^k
-function peval(weights, cx, cy) {
-  let sx = 0, sy = 0;
-  let zx = 1, zy = 0;
-
-  for (let k = 0; k < weights.length; k++) {
-    let w = weights[k];
-    sx += w * zx;
-    sy += w * zy;
-    let zx2 = zx * cx - zy * cy;
-    let zy2 = zx * cy + zy * cx;
-    zx = zx2;
-    zy = zy2;
-  }
-
-  return Math.sqrt(sx * sx + sy * sy);
+function hsv2rgb(hue, sat = 1, val = 1) {
+  // vec3 hsv2rgb(vec3 c) {
+  //   vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+  //   vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  //   return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+  // }
+  let Kx = 1, Ky = 2 / 3, Kz = 1 / 3, Kw = 3;
+  let px = Math.abs(fract(hue + Kx) * 6 - Kw);
+  let py = Math.abs(fract(hue + Ky) * 6 - Kw);
+  let pz = Math.abs(fract(hue + Kz) * 6 - Kw);
+  let r = val * mix(Kx, clamp(px - Kx, 0, 1), sat);
+  let g = val * mix(Kx, clamp(py - Kx, 0, 1), sat);
+  let b = val * mix(Kx, clamp(pz - Kx, 0, 1), sat);
+  return [r, g, b];
 }
 
-canvasSpectrum.addEventListener('click', async (e) => {
-  e.preventDefault();
-  if (sdrawing) return;
-  sdrawing = true;
-  let frame = getAudioFrame(numFrames / 2); // middle frame
-  let fbase = e.offsetX / canvasSpectrum.clientWidth * FFT_FMAX;
-  let weights = [1];
-  let wsum = 0;
-  log.i('Base freq bin:', fbase | 0, fbase / FFT_FMAX * 22500 | 0, 'Hz');
+function playAudioSample(abuffer) {
+  let source = audioCtx.createBufferSource();
+  source.buffer = abuffer;
+  source.connect(audioCtx.destination);
+  audioCtxStartTime = audioCtx.currentTime;
+  log.i('Playing audio at', audioCtxStartTime.toFixed(1), 's');
+  source.start();
+}
 
-  for (let k = 1; k < HW_LEN; k++) {
-    let x = fbase * k | 0;
-    let w = x < frame.length ? frame[x] : 0;
-    w = getAmp2LogVal(w);
-    weights[k] = w;
-    wsum += w;
-  }
+function drawVerticalLine() {
+  cancelAnimationFrame(vTimeBarAnimationId);
+  vTimeBarAnimationId = requestAnimationFrame(drawVerticalLine);
+  if (!abuffer) return;
+  let at = audioCtx.currentTime - audioCtxStartTime;
+  let cp = at / abuffer.duration * audio32.length;
+  let dt = (cp - aviewport.min) / aviewport.len;
+  vTimeBar.style.left = (100 * dt).toFixed(2) + '%';
+  vTimeBar.style.visibility = dt < 0 || dt > 1 ? 'hidden' : 'visible';
+  if (at > abuffer.duration)
+    cancelAnimationFrame(vTimeBarAnimationId);
+}
 
-  for (let k = 1; k < HW_LEN; k++)
-    weights[k] /= wsum;
+canvasFFT.onmousemove = e => {
+  if (!abuffer) return;
+  let x = e.offsetX / canvasFFT.clientWidth;
+  let y = e.offsetY / canvasFFT.clientHeight;
+  let dt = (x * aviewport.len + aviewport.min) / audio32.length * abuffer.duration;
+  let hz = (1 - y) * fftMax / FFT_SIZE * SAMPLE_RATE;
+  document.title = dt.toFixed(1) + 's ' + hz.toFixed(0) + ' Hz';
+};
 
-  log.i('Weights:', weights.map(w => w.toFixed(3)).join(' '));
-  pdraw(canvasImage, weights, 1);
-  sdrawing = false;
-});
-
-canvasFFT.addEventListener('click', async (e) => {
-  e.preventDefault();
-  let audioContext = new AudioContext;
+$('#upload').addEventListener('click', async (e) => {
+  audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
   let file = await selectAudioFile();
   if (!file) return;
   log.i('Selected file:', file.type,
     file.size / 2 ** 10 | 0, 'KB', file.name);
-  audio.src = URL.createObjectURL(file);
-  audio.play();
 
   let fileData = await file.arrayBuffer();
-  let abuffer = await audioContext.decodeAudioData(fileData);
+  log.v('Decoding audio data...');
+  abuffer = await audioCtx.decodeAudioData(fileData);
   log.i('Audio buffer:',
     abuffer.numberOfChannels, 'ch',
     'x', abuffer.sampleRate, 'Hz',
@@ -259,52 +278,86 @@ canvasFFT.addEventListener('click', async (e) => {
 
   audio32 = abuffer.getChannelData(0);
   aviewport.min = 0;
-  aviewport.len = Math.min(audio32.length, numFrames * FFT_SIZE);
+  aviewport.len = Math.min(audio32.length, SAMPLE_RATE * 5);
   await renderFFT();
-  renderSpectrum();
+  playAudioSample(abuffer);
 });
 
+$('#polar').onclick = (e) => {
+  if (!abuffer) return;
+  usePolarCoords = !usePolarCoords;
+  renderFFT();
+};
+
+canvasFFT.onclick = (e) => {
+  if (!abuffer) return;
+  let x = e.offsetX / canvasFFT.clientWidth;
+  let t = (x * aviewport.len + aviewport.min) | 0;
+  let changed = false;
+  if (e.ctrlKey) {
+    changed = true;
+    aviewport.len -= t - aviewport.min;
+    aviewport.min = t;
+  } else if (e.shiftKey) {
+    changed = true;
+    aviewport.len = t - aviewport.min;
+  }
+  if (changed)
+    renderFFT();
+};
+
 document.body.onkeypress = async (e) => {
-  e.preventDefault();
   let key = e.key.toUpperCase();
-  console.log('Press:', key);
   let dx = aviewport.len / 2;
   let changed = false;
 
   switch (key) {
     case 'A':
-      if (aviewport.min < dx) break;
-      log.i('Moving backward by', dx, 'samples');
-      aviewport.min -= dx;
+      log.v('Moving backward by', dx / 2, 'samples');
+      aviewport.min -= dx / 2;
       changed = true;
       break;
     case 'D':
-      if (aviewport.min > audio32.length - dx) break;
-      log.i('Moving forward by', dx, 'samples');
-      aviewport.min += dx;
+      log.v('Moving forward by', dx / 2, 'samples');
+      aviewport.min += dx / 2;
       changed = true;
       break;
     case 'W':
-      if (aviewport.len < FFT_SIZE * 2) break;
-      log.i('Zooming in 2x');
+      log.v('Zooming in 2x');
       aviewport.min += dx / 2;
       aviewport.len *= 0.5;
       changed = true;
       break;
     case 'S':
-      if (aviewport.len > audio32.length / 2) break;
-      if (aviewport.min < dx) break;
-      log.i('Zooming out 2x');
+      log.v('Zooming out 2x');
       aviewport.min -= dx;
       aviewport.len *= 2;
+      changed = true;
+      break;
+    case 'Q':
+      if (fftMax <= 32) break;
+      fftMax /= 2;
+      log.v('New max freq:', fftMax / FFT_SIZE * 2);
+      changed = true;
+      break;
+    case 'E':
+      if (fftMax >= FFT_SIZE / 2) break;
+      fftMax *= 2;
+      log.v('New max freq:', fftMax / FFT_SIZE * 2);
       changed = true;
       break;
   }
 
   if (changed) {
+    aviewport.min = Math.max(0, aviewport.min | 0);
+    aviewport.len = Math.min(audio32.length - aviewport.min, aviewport.len | 0);
+    await sleep(0);
+    if (fftCToken)
+      fftCToken.cancelled = true;
+    fftCToken = {};
     await renderFFT();
-    renderSpectrum();
   }
 };
 
+drawVerticalLine();
 log.i('Ready.');

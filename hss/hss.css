@@ -3,20 +3,36 @@ body {
   padding: 0;
   width: 100%;
   height: 100%;
+  background: #000;
 }
 
 #fft {
+  position: fixed;
   width: 100%;
-  height: 25%;
-  background: #fee;
+  height: 100%;
 }
 
-#spectrum {
-  width: 100%;
-  height: 25%;
+#buttons {
+  position: fixed;
+  left: 0;
+  top: 0;
 }
 
-#image {
-  width: 100%;
-  height: 50%;
+#buttons button {
+  padding: 0;
+  width: 2em;
+  height: 2em;
+  margin: 0.5em;
+  font-weight: bold;
+  border: 1px solid #888;
+  cursor: pointer;
+}
+
+#vtimebar {
+  position: fixed;
+  width: 1px;
+  height: 100%;
+  top: 0;
+  background: #0f0;
+  visibility: hidden;
 }

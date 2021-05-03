@@ -144,6 +144,21 @@ export class FFT {
     return res;
   }
 
+  static shift(src, res = src.slice(0), phase = -1/2) {
+    let n = src.length / 2;
+
+    for (let i = 0; i < n; i++) {
+      let re = src[2 * i];
+      let im = src[2 * i + 1];
+      let e_re = Math.cos(2 * Math.PI * i / n * phase);
+      let e_im = Math.sin(2 * Math.PI * i / n * phase);
+      res[2 * i] = re * e_re - im * e_im;
+      res[2 * i + 1] = re * e_im + im * e_re;
+    }
+
+    return res;
+  }
+
   static normalize(res) {
     let n = res.length / 2;
     let n_rsqrt = 1 / Math.sqrt(n);
