@@ -30,6 +30,9 @@ Bird songs recordings were taken from www.fssbirding.org.uk/sonagrams.htm. Unlik
 [![](bird/12.jpg)](bird/12.png)
 [![](bird/13.jpg)](bird/13.png)
 [![](bird/14.jpg)](bird/14.png)
+[![](bird/15.jpg)](bird/15.png)
+[![](bird/16.jpg)](bird/16.png)
+[![](bird/17.jpg)](bird/17.png)
 
 Compare this with CWT and standard FFT (no overlapping frames, a fixed set of frequencies):
 
