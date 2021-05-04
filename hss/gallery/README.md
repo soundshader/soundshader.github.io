@@ -5,9 +5,12 @@ Demo: [soundshader.github.io/hss](https://soundshader.github.io/hss).
 A typical FFT-based spectrogram uses 1024 bins on a 48 kHz audio, with about 50 Hz step per pixel. Most of the interesting audio activity happens below 3 kHz, so 50 Hz per pixel gives only 60 pixels for that area. As a result, the spectrogram is pixelated. One way to get highres spectrograms is to use CWT (continuous wavelet transform), but it's messy to implement. Another trick is to use regular FFT shifted by 1/2 pixel (by 25 Hz): the [DFT Shift Theorem](https://en.wikipedia.org/wiki/Discrete_Fourier_transform#Shift_theorem) enables such frequency shifting by multiplying the input signal by `exp(-i*pi*k/N)`. Smoothness in the time direction is easier to achieve: the 1024 bins window can be advanced by arbitrarily small time steps.
 
 Images below use an HSV-based color scheme:
+
 - H is the weighted sum of the rainbow palette where log-scaled FFT amplitudes are weights.
-- S is `1.0 - FFT[i]^2 / max FFT^2`, i.e. the max FFT amplitude has 0 saturation, i.e. white.
+- S is `1.0 - FFT[i]^2 / max FFT^2`, i.e. the max FFT amplitude has 0 saturation or just white.
 - V is the log-scaled FFT amplitude.
+
+Click the images to see fullres versions.
 
 ## Bird songs
 
