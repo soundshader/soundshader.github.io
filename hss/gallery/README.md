@@ -31,6 +31,14 @@ Bird songs recordings were taken from www.fssbirding.org.uk/sonagrams.htm. Unlik
 [![](bird/13.jpg)](bird/13.png)
 [![](bird/14.jpg)](bird/14.png)
 
+Compare this with CWT and standard FFT (no overlapping frames, a fixed set of frequencies):
+
+[![](comp/cwt.jpg)](comp/cwt.png)
+[![](comp/fft-1.jpg)](comp/fft-1.png)
+[![](comp/fft-2.jpg)](comp/fft-2.png)
+
+The CWT spectrogram was obtained with [soundshader.github.io/?s=cwt](https://soundshader.github.io/?s=cwt). Despite this CWT implementation runs on GPU and this "advanced" FFT runs on JS, CWT is about 50-100x slower.
+
 ## Bongo
 
 [![](bongo/1.jpg)](bongo/1.png)
