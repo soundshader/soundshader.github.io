@@ -3,17 +3,19 @@ import { FFT } from '../audio/fft.js';
 
 const ARGS = new URLSearchParams(location.search);
 
-const SAMPLE_RATE = 48000;
-const FFT_SIZE = 1024;
-const NUM_FRAMES = 1024;
+const SAMPLE_RATE = +ARGS.get('srate') || 48000;
+const FFT_SIZE = +ARGS.get('bins') || 1024;
+const NUM_FREQS = +ARGS.get('cw') || 1024;
+const NUM_FRAMES = +ARGS.get('ch') || 1024;
 // On 48 kHz audio, FFT_SIZE/2 bins maps to 24 kHz.
 // This is also the max possible value: FFT can't
 // detect frequencies higher than FFT_SIZE/2.
-let fftMax = +ARGS.get('fmax') || 256;
+let fftMax = +ARGS.get('fmax') || FFT_SIZE / 4;
 // 0.2 means the 0..255 rgba range maps to 1e-5..1.0.
 // This seems excessive, but ear is able to hear the
 // 1e-5 signal clearly. Can be tested on bird songs.
-const AMP2_LOG = 0.2;
+const AMP2_LOG = +ARGS.get('alog') || 0.2;
+const USE_WINFN = +ARGS.get('winf') || 0;
 
 const $ = s => document.querySelector(s);
 const sleep = dt => new Promise(resolve => setTimeout(resolve, dt));
@@ -24,10 +26,10 @@ const mix = (min, max, x) => min * (1 - x) + max * x;
 const vTimeBar = $('#vtimebar');
 const canvasFFT = $('#fft');
 const fft = new FFT(FFT_SIZE);
-const fftSqrAmp = new Float32Array(FFT_SIZE * NUM_FRAMES);
-const rgba_data = new Uint8ClampedArray(FFT_SIZE * NUM_FRAMES * 4);
+const fftSqrAmp = new Float32Array(NUM_FREQS * NUM_FRAMES);
+const rgba_data = new Uint8ClampedArray(NUM_FREQS * NUM_FRAMES * 4);
 
-canvasFFT.height = FFT_SIZE;
+canvasFFT.height = NUM_FREQS;
 canvasFFT.width = NUM_FRAMES;
 
 let audioCtx = null;
@@ -80,7 +82,7 @@ function getLoudness(amp2) {
 
 async function renderFFT(ctoken = fftCToken) {
   let n = FFT_SIZE;
-  let ns = FFT_SIZE / fftMax;
+  let nshifts = NUM_FREQS / fftMax;
   let f32data = audio32.subarray(aviewport.min, aviewport.min + aviewport.len + n);
   let s2t = k => (k / audio32.length * abuffer.duration | 0) + 's';
 
@@ -89,21 +91,19 @@ async function renderFFT(ctoken = fftCToken) {
   let step = aviewport.len / cw;
   log.i('FFT input:', s2t(aviewport.len),
     'at', s2t(aviewport.min), 'out of', s2t(audio32.length), 'total;',
-    cw, 'frames', 'x', n, 'freq bins', 'x', ns, 'shifted inter-layers;',
+    cw, 'frames', 'x', n, 'freq bins', 'x', nshifts, 'shifted inter-layers;',
     'step', step | 0);
-  if (cw * n < aviewport.len)
-    log.w('Too much audio data: spectrogram will be sparse');
 
   let tprev = Date.now();
   let ctx2d = canvasFFT.getContext('2d');
-  let image = ctx2d.getImageData(0, 0, cw, n);
+  let image = ctx2d.getImageData(0, 0, cw, ch);
   let input1 = new Float32Array(n);
   let input2 = new Float32Array(n * 2); // (re, im), im = 0
   let input3 = new Float32Array(n * 2); // input2 shifted
   let output = new Float32Array(n * 2);
   let ampsqr = new Float32Array(n); // |FFT[i]|^2
-  let xmin = 0, xmax = cw - 1;
 
+  let xmin = 0, xmax = cw - 1;
   if (fftSqrAmpLen != aviewport.len) {
     fftSqrAmp.fill(0);
   } else {
@@ -119,14 +119,13 @@ async function renderFFT(ctoken = fftCToken) {
       xmax = -s;
     }
   }
-
   fftSqrAmpPos = aviewport.min;
   fftSqrAmpLen = aviewport.len;
 
   for (let x = xmin; x <= xmax; x++) {
     let offset = x * step | 0;
     getPaddedSlice(f32data, offset, offset + n, input1);
-    let frame = fftSqrAmp.subarray(x * n, x * n + n);
+    if (USE_WINFN) applyHannWindow(input1);
     FFT.expand(input1, input2);
 
     // This is called shifted DFT. Normal DFT with 1024 bins
@@ -138,12 +137,16 @@ async function renderFFT(ctoken = fftCToken) {
     // DFT shifted by half-bin or 25 Hz. This can be repeated
     // to shift DFT by 1/4-th bin and so on. Assembling the
     // shifted DFTs gets a result almost identical to CWT.
-    for (let s = 0; s < ns; s++) {
-      FFT.shift(input2, input3, -s / ns);
+    let frame = getSqrAmpFrame(x);
+    assert(frame.length == fftMax * nshifts);
+
+    for (let s = 0; s < nshifts; s++) {
+      FFT.shift(input2, input3, -s / nshifts);
       fft.transform(input3, output);
       FFT.sqr_abs(output, ampsqr);
+      
       for (let i = 0; i < fftMax; i++)
-        frame[i * ns + s] = ampsqr[i];
+        frame[i * nshifts + s] = ampsqr[i];
     }
 
     if (Date.now() > tprev + 150) {
@@ -156,7 +159,7 @@ async function renderFFT(ctoken = fftCToken) {
   }
 
   for (let x = 0; x < cw; x++) {
-    let frame = fftSqrAmp.subarray(x * n, x * n + n);
+    let frame = getSqrAmpFrame(x);
     let hue = getSpectrumColor(frame); // 0..1
     let maxamp2 = 0;
 
@@ -203,15 +206,28 @@ async function renderFFT(ctoken = fftCToken) {
   ctx2d.putImageData(image, 0, 0);
 }
 
+function getSqrAmpFrame(x) {
+  let n = NUM_FREQS;
+  assert(x >= 0 && x < NUM_FRAMES);
+  return fftSqrAmp.subarray(x * n, (x + 1) * n);
+}
+
+function applyHannWindow(frame) {
+  let n = frame.length;
+  for (let i = 0; i < n; i++) {
+    let s = Math.sin(Math.PI * i / n);
+    frame[i] *= (s * s);
+  }
+}
+
 function getSpectrumColor(frame) {
-  assert(frame.length == FFT_SIZE);
   let s = 0, t = 0;
   for (let i = 0; i < frame.length; i++) {
     let v = getLoudness(frame[i]);
     t += v;
     s += i * v;
   }
-  return s / t / frame.length; // * fftMax / FFT_SIZE * 2;
+  return s / t / frame.length;
 }
 
 function hsv2rgb(hue, sat = 1, val = 1) {
