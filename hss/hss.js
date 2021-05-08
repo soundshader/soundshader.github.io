@@ -2,7 +2,6 @@ import * as log from '../log.js';
 import { FFT } from '../audio/fft.js';
 
 const ARGS = new URLSearchParams(location.search);
-
 const SAMPLE_RATE = +ARGS.get('srate') || 48000;
 const FFT_SIZE = +ARGS.get('bins') || 1024;
 const NUM_FREQS = +ARGS.get('cw') || 1024;
@@ -16,6 +15,7 @@ let fftMax = +ARGS.get('fmax') || FFT_SIZE / 4;
 // 1e-5 signal clearly. Can be tested on bird songs.
 const AMP2_LOG = +ARGS.get('alog') || 0.2;
 const USE_WINFN = +ARGS.get('winf') || 0;
+const USE_WDF = +ARGS.get('wdf') || 0;
 
 const $ = s => document.querySelector(s);
 const sleep = dt => new Promise(resolve => setTimeout(resolve, dt));
@@ -123,8 +123,11 @@ async function renderFFT(ctoken = fftCToken) {
   for (let x = xmin; x <= xmax; x++) {
     let offset = x * step | 0;
     getPaddedSlice(f32data, offset, offset + n, input1);
+    if (USE_WDF) applyWDF(input1);
     if (USE_WINFN) applyHannWindow(input1);
     FFT.expand(input1, input2);
+    let frame = getSqrAmpFrame(x);
+    assert(frame.length == fftMax * nshifts);    
 
     // This is called shifted DFT. Normal DFT with 1024 bins
     // on a 48 kHz input has a max resolution of 1024/48000 s.
@@ -135,14 +138,18 @@ async function renderFFT(ctoken = fftCToken) {
     // DFT shifted by half-bin or 25 Hz. This can be repeated
     // to shift DFT by 1/4-th bin and so on. Assembling the
     // shifted DFTs gets a result almost identical to CWT.
-    let frame = getSqrAmpFrame(x);
-    assert(frame.length == fftMax * nshifts);
-
     for (let s = 0; s < nshifts; s++) {
       FFT.shift(input2, input3, -s / nshifts);
       fft.transform(input3, output);
       FFT.sqr_abs(output, ampsqr);
-      
+
+      if (!USE_WDF) {
+        // While WDF is a strictly real function (Im = 0),
+        // WDF of a FFT.shift'd wave has the Im != 0 component.
+        for (let i = 0; i < fftMax; i++)
+          ampsqr[i] = Math.sqrt(ampsqr[i]);
+      }
+
       for (let i = 0; i < fftMax; i++)
         frame[i * nshifts + s] = ampsqr[i];
     }
@@ -157,6 +164,10 @@ async function renderFFT(ctoken = fftCToken) {
     }
   }
 
+  let maxvol = 0;
+  for (let i = 0; i < fftSqrAmp.length; i++)
+    maxvol = Math.max(maxvol, getLoudness(fftSqrAmp[i]));
+
   for (let x = 0; x < cw; x++) {
     let frame = getSqrAmpFrame(x);
     let hue = getSpectrumColor(frame); // 0..1
@@ -167,7 +178,7 @@ async function renderFFT(ctoken = fftCToken) {
 
     for (let y = 0; y < ch; y++) {
       let amp2 = frame[ch - y - 1];
-      let vol = getLoudness(amp2);
+      let vol = getLoudness(amp2) / maxvol;
       let sat = 1 - amp2 / maxamp2;
       let [r, g, b] = hsv2rgb(hue, sat, vol);
 
@@ -188,10 +199,20 @@ function getSqrAmpFrame(x) {
   return fftSqrAmp.subarray(x * n, (x + 1) * n);
 }
 
+function applyWDF(wave) {
+  let n = wave.length;
+  for (let i = 0; i < n / 2; i++)
+    wave[i] *= wave[n - 1 - i];
+  for (let i = 0; i < n / 2; i++)
+    wave[i] = wave[n / 2 + i >> 1];
+  for (let i = 0; i < n / 2; i++)
+    wave[n - 1 - i] = wave[i];
+}
+
 function applyHannWindow(frame) {
   let n = frame.length;
   for (let i = 0; i < n; i++) {
-    let s = Math.sin(Math.PI * i / n);
+    let s = Math.sin(Math.PI * (i + 0.5) / n);
     frame[i] *= (s * s);
   }
 }
