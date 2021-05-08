@@ -27,7 +27,6 @@ const vTimeBar = $('#vtimebar');
 const canvasFFT = $('#fft');
 const fft = new FFT(FFT_SIZE);
 const fftSqrAmp = new Float32Array(NUM_FREQS * NUM_FRAMES);
-const rgba_data = new Uint8ClampedArray(NUM_FREQS * NUM_FRAMES * 4);
 
 canvasFFT.height = NUM_FREQS;
 canvasFFT.width = NUM_FRAMES;
@@ -39,7 +38,6 @@ let aviewport = { min: 0, len: 0 };
 let fftCToken = { cancelled: false };
 let audioCtxStartTime = 0;
 let vTimeBarAnimationId = 0;
-let usePolarCoords = false;
 let fftSqrAmpPos = 0; // NUM_FRAMES starting from here in abuffer.
 let fftSqrAmpLen = 0;
 
@@ -149,12 +147,13 @@ async function renderFFT(ctoken = fftCToken) {
         frame[i * nshifts + s] = ampsqr[i];
     }
 
-    if (Date.now() > tprev + 150) {
+    if (Date.now() > tprev + 250) {
       log.v('FFT progress:', x / cw * 100 | 0, '%');
       await sleep(0);
       tprev = Date.now();
       if (ctoken.cancelled)
         return;
+      ctx2d.putImageData(image, 0, 0);
     }
   }
 
@@ -173,33 +172,10 @@ async function renderFFT(ctoken = fftCToken) {
       let [r, g, b] = hsv2rgb(hue, sat, vol);
 
       let offset = (y * cw + x) * 4;
-      rgba_data[offset + 0] = vol * r * 255;
-      rgba_data[offset + 1] = vol * g * 255;
-      rgba_data[offset + 2] = vol * b * 255;
-      rgba_data[offset + 3] = 255;
-    }
-  }
-
-  if (!usePolarCoords) {
-    image.data.set(rgba_data);
-  } else {
-    for (let x = 0; x < cw; x++) {
-      for (let y = 0; y < ch; y++) {
-        let dx = 2 * x / cw - 1;
-        let dy = 2 * y / cw - 1;
-        let a = Math.atan2(dx, -dy) / Math.PI * 0.5 + 0.5; // 0..1
-        let r = Math.hypot(dx, dy); // 0..1
-        a = Math.abs(a - 0.5) * 2;
-        r = 1 - Math.abs(r - 0.25);
-        let sx = clamp(a) * cw | 0;
-        let sy = clamp(r) * ch | 0;
-        let src = (sy * cw + sx) * 4;
-        let res = (y * cw + x) * 4;
-        image.data[res + 0] = rgba_data[src + 0];
-        image.data[res + 1] = rgba_data[src + 1];
-        image.data[res + 2] = rgba_data[src + 2];
-        image.data[res + 3] = rgba_data[src + 3];
-      }
+      image.data[offset + 0] = vol * r * 255;
+      image.data[offset + 1] = vol * g * 255;
+      image.data[offset + 2] = vol * b * 255;
+      image.data[offset + 3] = 255;
     }
   }
 
@@ -298,12 +274,6 @@ $('#upload').addEventListener('click', async (e) => {
   await renderFFT();
   playAudioSample(abuffer);
 });
-
-$('#polar').onclick = (e) => {
-  if (!abuffer) return;
-  usePolarCoords = !usePolarCoords;
-  renderFFT();
-};
 
 canvasFFT.onclick = (e) => {
   if (!abuffer) return;
