@@ -4,12 +4,22 @@ body {
   width: 100%;
   height: 100%;
   background: #000;
+  font-family: monospace;
 }
 
 #fft {
   position: fixed;
   width: 100%;
   height: 100%;
+}
+
+#info {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  padding: 0.5em;
+  background: #000;
+  color: #080;
 }
 
 #buttons {
