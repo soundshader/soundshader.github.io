@@ -43,10 +43,9 @@ let fftSqrAmpPos = 0; // NUM_FRAMES starting from here in abuffer.
 let fftSqrAmpLen = 0;
 
 function assert(x) {
-  if (!x) {
-    debugger;
-    throw new Error('assert() failed');
-  }
+  if (x) return;
+  debugger;
+  throw new Error('assert() failed');
 }
 
 async function selectAudioFile() {
@@ -109,7 +108,7 @@ async function renderFFT(ctoken = fftCToken) {
 
   for (let x = xmin; x <= xmax; x++) {
     let offset = x * step | 0;
-    getPaddedSlice(f32data, offset, offset + n, input1);
+    getPaddedSlice(f32data, offset - n / 2, offset + n / 2, input1);
     if (USE_WDF) applyWDF(input1);
     if (USE_WINFN) applyHannWindow(input1);
     FFT.expand(input1, input2);
