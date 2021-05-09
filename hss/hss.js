@@ -74,8 +74,8 @@ function getPaddedSlice(src, min, max,
   return res;
 }
 
-function getLoudness(amp2) {
-  return !amp2 ? 0 : clamp(Math.log10(amp2) / AMP2_LOG + 1.0);
+function loudness(amp2) {
+  return amp2 <= 0 ? -Infinity : Math.log10(amp2) / AMP2_LOG;
 }
 
 async function renderFFT(ctoken = fftCToken) {
@@ -108,7 +108,7 @@ async function renderFFT(ctoken = fftCToken) {
 
   for (let x = xmin; x <= xmax; x++) {
     let offset = x * step | 0;
-    getPaddedSlice(f32data, offset - n / 2, offset + n / 2, input1);
+    getPaddedSlice(f32data, offset, offset + n, input1);
     if (USE_WDF) applyWDF(input1);
     if (USE_WINFN) applyHannWindow(input1);
     FFT.expand(input1, input2);
@@ -128,51 +128,41 @@ async function renderFFT(ctoken = fftCToken) {
       FFT.shift(input2, input3, -s / nshifts);
       fft.transform(input3, output);
       FFT.sqr_abs(output, ampsqr);
+      // WDF is already squared.
       for (let i = 0; i < fftMax; i++)
-        frame[i * nshifts + s] = ampsqr[i];
-    }
-
-    if (USE_WDF) {
-      // While WDF is a strictly real function (Im = 0),
-      // WDF of a FFT.shift'd wave has the Im != 0 component.
-      for (let i = 0; i < frame.length; i++)
-        frame[i] = Math.sqrt(frame[i]);
+        frame[i * nshifts + s] =
+          USE_WDF ? Math.sqrt(ampsqr[i]) : ampsqr[i];
     }
 
     if (Date.now() > tprev + 250) {
       log.v('FFT progress:', x / cw * 100 | 0, '%');
-      await sleep(0);
-      ctx2d.putImageData(image, 0, 0);
+      await sleep(10);
       tprev = Date.now();
       if (ctoken.cancelled) return;
     }
   }
 
-  let maxvol = 0;
-  for (let i = 0; i < fftSqrAmp.length; i++) {
-    let a = fftSqrAmp[i];
-    let v = getLoudness(a);
-    maxvol = Math.max(maxvol, v);
-  }
+  let gmax = -Infinity;
+  for (let i = 0; i < fftSqrAmp.length; i++)
+    gmax = Math.max(gmax, loudness(fftSqrAmp[i]));
 
   for (let x = 0; x < cw; x++) {
     let frame = getSqrAmpFrame(x);
     let hue = getSpectrumColor(frame); // 0..1
-    let maxamp2 = 0;
+    let fmax = 0;
 
     for (let y = 0; y < frame.length; y++)
-      maxamp2 = Math.max(maxamp2, frame[y]);
+      fmax = Math.max(fmax, frame[y]);
 
     for (let y = 0; y < ch; y++) {
       let a = frame[ch - y - 1];
-      let v = getLoudness(a);
-      let vol = v / maxvol;
-      let sat = 1 - a / maxamp2;
+      let vol = clamp(loudness(a) - gmax + 1);
+      let sat = 1 - a / fmax;
       let [r, g, b] = hsv2rgb(hue, sat, vol);
       let offset = (y * cw + x) * 4;
-      image.data[offset + 0] = vol * r * 255;
-      image.data[offset + 1] = vol * g * 255;
-      image.data[offset + 2] = vol * b * 255;
+      image.data[offset + 0] = r * 255;
+      image.data[offset + 1] = g * 255;
+      image.data[offset + 2] = b * 255;
       image.data[offset + 3] = 255;
     }
   }
@@ -264,7 +254,10 @@ canvasFFT.onmousemove = e => {
   let y = e.offsetY / canvasFFT.clientHeight;
   let dt = (x * aviewport.len + aviewport.min) / audio32.length * abuffer.duration;
   let hz = (1 - y) * fftMax / FFT_SIZE * SAMPLE_RATE;
-  eInfo.textContent = dt.toFixed(2) + 's ' + hz.toFixed(0) + ' Hz';
+  let a2 = fftSqrAmp[(x * NUM_FRAMES | 0) * NUM_FREQS + ((1 - y) * NUM_FREQS | 0)];
+  eInfo.textContent = dt.toFixed(2) + 's '
+    + hz.toFixed(0) + ' Hz '
+    + a2.toExponential(1);
 };
 
 $('#upload').addEventListener('click', async (e) => {
@@ -284,7 +277,7 @@ $('#upload').addEventListener('click', async (e) => {
 
   audio32 = abuffer.getChannelData(0);
   aviewport.min = 0;
-  aviewport.len = audio32.length;
+  aviewport.len = Math.min(audio32.length, 10 * SAMPLE_RATE);
   await renderFFT();
   playAudioSample(abuffer);
 });
@@ -360,4 +353,4 @@ document.body.onkeypress = async (e) => {
 };
 
 drawVerticalLine();
-log.i('Ready.');
+log.i('Ready');
