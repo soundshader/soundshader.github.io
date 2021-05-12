@@ -11,6 +11,7 @@ const NUM_FRAMES = +ARGS.get('cw') || 1024;
 // This is also the max possible value: FFT can't
 // detect frequencies higher than FFT_SIZE/2.
 let fftMax = +ARGS.get('fmax') || FFT_SIZE / 4;
+let fftMin = +ARGS.get('fmin') || 0;
 // 5.0 means the 0..255 rgba range maps to 1e-5..1.0.
 // This seems excessive, but ear is able to hear the
 // 1e-5 signal clearly. Can be tested on bird songs.
@@ -78,9 +79,15 @@ function loudness(amp2) {
   return amp2 <= 0 ? -Infinity : Math.log10(amp2) / AMP2_LOG;
 }
 
-async function renderFFT(ctoken = fftCToken) {
+async function renderFFT() {
+  if (fftCToken)
+    fftCToken.cancelled = true;
+  fftCToken = {};
+  let ctoken = fftCToken;
+  await sleep(10);
+
   let n = FFT_SIZE;
-  let nshifts = NUM_FREQS / fftMax;
+  let nshifts = NUM_FREQS / (fftMax - fftMin);
   let f32data = audio32.subarray(aviewport.min, aviewport.min + aviewport.len + n);
   let cw = canvasFFT.width;
   let ch = canvasFFT.height;
@@ -113,7 +120,7 @@ async function renderFFT(ctoken = fftCToken) {
     if (USE_WINFN) applyHannWindow(input1);
     FFT.expand(input1, input2);
     let frame = getSqrAmpFrame(x);
-    assert(frame.length == fftMax * nshifts);
+    assert(frame.length == (fftMax - fftMin) * nshifts);
 
     // This is called shifted DFT. Normal DFT with 1024 bins
     // on a 48 kHz input has a max resolution of 1024/48000 s.
@@ -128,11 +135,12 @@ async function renderFFT(ctoken = fftCToken) {
       FFT.shift(input2, input3, -s / nshifts);
       fft.transform(input3, output);
       FFT.sqr_abs(output, ampsqr);
-      // WDF is already squared.
-      for (let i = 0; i < fftMax; i++)
-        frame[i * nshifts + s] =
-          USE_WDF ? Math.sqrt(ampsqr[i]) : ampsqr[i];
+      for (let i = fftMin; i < fftMax; i++)
+        frame[(i - fftMin) * nshifts + s] = ampsqr[i];
     }
+
+    // WDF is already squared.
+    if (USE_WDF) applyFn(frame, Math.sqrt);
 
     if (Date.now() > tprev + 250) {
       log.v('FFT progress:', x / cw * 100 | 0, '%');
@@ -170,6 +178,11 @@ async function renderFFT(ctoken = fftCToken) {
   ctx2d.putImageData(image, 0, 0);
 }
 
+function applyFn(a, fn) {
+  for (let i = 0; i < a.length; i++)
+    a[i] = fn(a[i]);
+}
+
 function rotateArray(a, m) {
   assert(Math.abs(m) < a.length);
   if (m > 0) a.set(a.subarray(m), 0);
@@ -195,7 +208,7 @@ function applyWDF(wave) {
 function applyHannWindow(frame) {
   let n = frame.length;
   for (let i = 0; i < n; i++) {
-    let s = Math.sin(Math.PI * (i + 0.5) / n);
+    let s = Math.sin(Math.PI * i / n);
     frame[i] *= (s * s);
   }
 }
@@ -207,7 +220,7 @@ function getSpectrumColor(frame) {
     sum += w;
     s += w * i / n;
   }
-  return s / sum;
+  return clamp(mix(fftMin, fftMax, s / sum) / FFT_SIZE * 4);
 }
 
 function hsv2rgb(hue, sat = 1, val = 1) {
@@ -253,7 +266,7 @@ canvasFFT.onmousemove = e => {
   let x = e.offsetX / canvasFFT.clientWidth;
   let y = e.offsetY / canvasFFT.clientHeight;
   let dt = (x * aviewport.len + aviewport.min) / audio32.length * abuffer.duration;
-  let hz = (1 - y) * fftMax / FFT_SIZE * SAMPLE_RATE;
+  let hz = mix(fftMin, fftMax, 1 - y) / FFT_SIZE * SAMPLE_RATE;
   let a2 = fftSqrAmp[(x * NUM_FRAMES | 0) * NUM_FREQS + ((1 - y) * NUM_FREQS | 0)];
   eInfo.textContent = dt.toFixed(2) + 's '
     + hz.toFixed(0) + ' Hz '
@@ -302,6 +315,7 @@ canvasFFT.onclick = (e) => {
 document.body.onkeypress = async (e) => {
   let key = e.key.toUpperCase();
   let dx = aviewport.len / 2;
+  let df = fftMax - fftMin;
   let changed = false;
 
   switch (key) {
@@ -315,28 +329,42 @@ document.body.onkeypress = async (e) => {
       aviewport.min += dx / 2;
       changed = true;
       break;
-    case 'W':
+    case 'Q':
       log.v('Zooming in 2x');
       aviewport.min += dx / 2;
       aviewport.len *= 0.5;
       changed = true;
       break;
-    case 'S':
+    case 'E':
       log.v('Zooming out 2x');
       aviewport.min -= dx;
       aviewport.len *= 2;
       changed = true;
       break;
-    case 'Q':
-      if (fftMax <= 32) break;
-      fftMax /= 2;
+    case 'F':
+      if (fftMax - df / 2 <= fftMin) break;
+      fftMax -= df / 2;
       log.v('New max freq:', fftMax / FFT_SIZE * 2);
       changed = true;
       break;
-    case 'E':
-      if (fftMax >= FFT_SIZE / 2) break;
-      fftMax *= 2;
+    case 'R':
+      if (fftMax + df > FFT_SIZE / 2) break;
+      fftMax += df;
       log.v('New max freq:', fftMax / FFT_SIZE * 2);
+      changed = true;
+      break;
+    case 'W':
+      if (fftMax + df / 2 > FFT_SIZE / 2) break;
+      fftMin += df / 2;
+      fftMax += df / 2;
+      log.v('New min freq:', fftMin / FFT_SIZE * 2);
+      changed = true;
+      break;
+    case 'S':
+      if (fftMin < df / 2) break;
+      fftMin -= df / 2;
+      fftMax -= df / 2;
+      log.v('New min freq:', fftMin / FFT_SIZE * 2);
       changed = true;
       break;
   }
@@ -344,10 +372,6 @@ document.body.onkeypress = async (e) => {
   if (changed) {
     aviewport.min = Math.max(0, aviewport.min | 0);
     aviewport.len = Math.min(audio32.length - aviewport.min, aviewport.len | 0);
-    await sleep(0);
-    if (fftCToken)
-      fftCToken.cancelled = true;
-    fftCToken = {};
     await renderFFT();
   }
 };
