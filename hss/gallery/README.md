@@ -40,8 +40,6 @@ Compare this with CWT and standard FFT (no overlapping frames, a fixed set of fr
 [![](comp/fft-1.jpg)](comp/fft-1.png)
 [![](comp/fft-2.jpg)](comp/fft-2.png)
 
-The CWT spectrogram was obtained with [soundshader.github.io/?s=cwt](https://soundshader.github.io/?s=cwt). Despite this CWT implementation runs on GPU and this "advanced" FFT runs on JS, CWT is about 50-100x slower.
-
 ## Bongo
 
 [![](bongo/1.jpg)](bongo/1.png)
