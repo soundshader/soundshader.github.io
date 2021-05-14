@@ -10,8 +10,8 @@ const NUM_FRAMES = +ARGS.get('cw') || 1024;
 // On 48 kHz audio, FFT_SIZE/2 bins maps to 24 kHz.
 // This is also the max possible value: FFT can't
 // detect frequencies higher than FFT_SIZE/2.
-let fftMax = +ARGS.get('fmax') || FFT_SIZE / 4;
-let fftMin = +ARGS.get('fmin') || 0;
+let freqMax = +ARGS.get('fmax') || FFT_SIZE / 4;
+let freqMin = +ARGS.get('fmin') || 0;
 // 5.0 means the 0..255 rgba range maps to 1e-5..1.0.
 // This seems excessive, but ear is able to hear the
 // 1e-5 signal clearly. Can be tested on bird songs.
@@ -63,7 +63,7 @@ async function selectAudioFile() {
 }
 
 // Same as src.slice(min, max), but padded with zeros.
-function getPaddedSlice(src, min, max,
+function getZeroPaddedSlice(src, min, max,
   res = new Float32Array(max - min)) {
   let n = src.length;
   res.fill(0);
@@ -87,8 +87,7 @@ async function renderFFT() {
   await sleep(10);
 
   let n = FFT_SIZE;
-  let nshifts = NUM_FREQS / (fftMax - fftMin);
-  let f32data = audio32.subarray(aviewport.min, aviewport.min + aviewport.len + n);
+  let nshifts = NUM_FREQS / (freqMax - freqMin);
   let cw = canvasFFT.width;
   let ch = canvasFFT.height;
   let step = aviewport.len / cw;
@@ -114,13 +113,13 @@ async function renderFFT() {
   fftSqrAmpLen = aviewport.len;
 
   for (let x = xmin; x <= xmax; x++) {
-    let offset = x * step | 0;
-    getPaddedSlice(f32data, offset, offset + n, input1);
+    let offset = aviewport.min + x * step | 0;
+    getZeroPaddedSlice(audio32, offset - n / 2, offset + n / 2, input1);
     if (USE_WDF) applyWDF(input1);
     if (USE_WINFN) applyHannWindow(input1);
     FFT.expand(input1, input2);
     let frame = getSqrAmpFrame(x);
-    assert(frame.length == (fftMax - fftMin) * nshifts);
+    assert(frame.length == (freqMax - freqMin) * nshifts);
 
     // This is called shifted DFT. Normal DFT with 1024 bins
     // on a 48 kHz input has a max resolution of 1024/48000 s.
@@ -135,8 +134,8 @@ async function renderFFT() {
       FFT.shift(input2, input3, -s / nshifts);
       fft.transform(input3, output);
       FFT.sqr_abs(output, ampsqr);
-      for (let i = fftMin; i < fftMax; i++)
-        frame[(i - fftMin) * nshifts + s] = ampsqr[i];
+      for (let i = freqMin; i < freqMax; i++)
+        frame[(i - freqMin) * nshifts + s] = ampsqr[i];
     }
 
     // WDF is already squared.
@@ -199,8 +198,8 @@ function applyWDF(wave) {
   let n = wave.length;
   for (let i = 0; i < n / 2; i++)
     wave[i] *= wave[n - 1 - i];
-  for (let i = 0; i < n / 2; i++)
-    wave[i] = wave[n / 2 + i >> 1];
+  for (let i = 0, j = n / 4; j < n / 2; i += 2, j++)
+    wave[i] = wave[i + 1] = wave[j];
   for (let i = 0; i < n / 2; i++)
     wave[n - 1 - i] = wave[i];
 }
@@ -220,7 +219,7 @@ function getSpectrumColor(frame) {
     sum += w;
     s += w * i / n;
   }
-  return clamp(mix(fftMin, fftMax, s / sum) / FFT_SIZE * 4);
+  return clamp(mix(freqMin, freqMax, s / sum) / FFT_SIZE * 4);
 }
 
 function hsv2rgb(hue, sat = 1, val = 1) {
@@ -266,7 +265,7 @@ canvasFFT.onmousemove = e => {
   let x = e.offsetX / canvasFFT.clientWidth;
   let y = e.offsetY / canvasFFT.clientHeight;
   let dt = (x * aviewport.len + aviewport.min) / audio32.length * abuffer.duration;
-  let hz = mix(fftMin, fftMax, 1 - y) / FFT_SIZE * SAMPLE_RATE;
+  let hz = mix(freqMin, freqMax, 1 - y) / FFT_SIZE * SAMPLE_RATE;
   let a2 = fftSqrAmp[(x * NUM_FRAMES | 0) * NUM_FREQS + ((1 - y) * NUM_FREQS | 0)];
   eInfo.textContent = dt.toFixed(2) + 's '
     + hz.toFixed(0) + ' Hz '
@@ -277,6 +276,7 @@ $('#upload').addEventListener('click', async (e) => {
   audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
   let file = await selectAudioFile();
   if (!file) return;
+  document.title = file.name;
   log.i('Selected file:', file.type,
     file.size / 2 ** 10 | 0, 'KB', file.name);
 
@@ -315,7 +315,7 @@ canvasFFT.onclick = (e) => {
 document.body.onkeypress = async (e) => {
   let key = e.key.toUpperCase();
   let dx = aviewport.len / 2;
-  let df = fftMax - fftMin;
+  let df = freqMax - freqMin;
   let changed = false;
 
   switch (key) {
@@ -342,29 +342,27 @@ document.body.onkeypress = async (e) => {
       changed = true;
       break;
     case 'F':
-      if (fftMax - df / 2 <= fftMin) break;
-      fftMax -= df / 2;
-      log.v('New max freq:', fftMax / FFT_SIZE * 2);
+      if (freqMax - df / 2 <= freqMin) break;
+      freqMax -= df / 2;
+      log.v('New max freq:', freqMax / FFT_SIZE * 2);
       changed = true;
       break;
     case 'R':
-      if (fftMax + df > FFT_SIZE / 2) break;
-      fftMax += df;
-      log.v('New max freq:', fftMax / FFT_SIZE * 2);
+      if (freqMax + df > FFT_SIZE / 2) break;
+      freqMax += df;
+      log.v('New max freq:', freqMax / FFT_SIZE * 2);
       changed = true;
       break;
     case 'W':
-      if (fftMax + df / 2 > FFT_SIZE / 2) break;
-      fftMin += df / 2;
-      fftMax += df / 2;
-      log.v('New min freq:', fftMin / FFT_SIZE * 2);
+      freqMax = Math.min(FFT_SIZE / 2, freqMax + df / 2);
+      freqMin = freqMax - df;
+      log.v('New min freq:', freqMin / FFT_SIZE * 2);
       changed = true;
       break;
     case 'S':
-      if (fftMin < df / 2) break;
-      fftMin -= df / 2;
-      fftMax -= df / 2;
-      log.v('New min freq:', fftMin / FFT_SIZE * 2);
+      freqMin = Math.max(0, freqMin - df / 2);
+      freqMax = freqMin + df;
+      log.v('New min freq:', freqMin / FFT_SIZE * 2);
       changed = true;
       break;
   }

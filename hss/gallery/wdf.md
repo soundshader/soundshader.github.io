@@ -50,8 +50,23 @@ Some bird examples: WDFs with 2048, 4096 and 8192 samples per frame.
 
 For some reason WDF is miles ahead on simple tibetian bowl sounds (that turn out to be not that simple). This is the same 500 ms of sound, the 0..3 kHz range (use `?wdf=1&alog=3&bins=4096` args):
 
-[![](wdf/bowl-wdf.xs.jpg)](wdf/bowl-wdf.jpg)
 [![](wdf/bowl-fft.xs.jpg)](wdf/bowl-fft.jpg)
+[![](wdf/bowl-wdf.xs.jpg)](wdf/bowl-wdf.jpg)
+
+A few more bowl examples (all WDF):
+
+[![](wdf/tb1.xs.jpg)](wdf/tb1.jpg)
+[![](wdf/tb2.xs.jpg)](wdf/tb2.jpg)
+[![](wdf/tb3.xs.jpg)](wdf/tb3.jpg)
+[![](wdf/tb4.xs.jpg)](wdf/tb4.jpg)
+[![](wdf/tb5.xs.jpg)](wdf/tb5.jpg)
+[![](wdf/tb6.xs.jpg)](wdf/tb6.jpg)
+[![](wdf/tb7.xs.jpg)](wdf/tb7.jpg)
+[![](wdf/tb8.xs.jpg)](wdf/tb8.jpg)
+[![](wdf/tb9.xs.jpg)](wdf/tb9.jpg)
+[![](wdf/tb10.xs.jpg)](wdf/tb10.jpg)
+[![](wdf/tb11.xs.jpg)](wdf/tb11.jpg)
+[![](wdf/tb12.xs.jpg)](wdf/tb12.jpg)
 
 ## Appendix
 
