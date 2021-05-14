@@ -34,7 +34,7 @@ So it doesn't really add any complexity on top of the regular FFT. In practice, 
 [![](comp/hann.xs.jpg)](comp/hann.jpg)
 [![](comp/fft-1.jpg)](comp/fft-1.png)
 [![](comp/fft-2.jpg)](comp/fft-2.png)
-[![](comp/wdf.xs.jpg)](comp/wdf.jpg)
+[![](wdf/wdf.xs.jpg)](wdf/wdf.jpg)
 
 WDF is able to produce interesting spectrograms sometimes, but in most cases it's unusably noisy. Unlike FFT spectrograms, WDF gets more precise on larger windows: frequency lines get thinner, at the expense of adding more noise around them. Below is the same violin sample: an FFT spectrogram, and two WDF spectrograms with 2048 and 4096 samples per frame.
 
