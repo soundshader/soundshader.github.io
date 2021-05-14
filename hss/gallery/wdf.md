@@ -46,6 +46,11 @@ Some bird examples: WDFs with 2048, 4096 and 8192 samples per frame.
 [![](wdf/wdf-5.xs.jpg)](wdf/wdf-5.jpg)
 [![](wdf/wdf-6.xs.jpg)](wdf/wdf-6.jpg)
 
+For some reason WDF is miles ahead on simple tibetian bowl sounds (that turn out to be not that simple). This is the same 500 ms of sound, the 0..3 kHz range (use `?wdf=1&alog=3&bins=4096` args):
+
+[![](wdf/bowl-wdf.xs.jpg)](wdf/bowl-wdf.jpg)
+[![](wdf/bowl-fft.xs.jpg)](wdf/bowl-fft.jpg)
+
 ## Appendix
 
 I've accidentally discovered that a lazy `ffmpeg -i bird.mp3 bird.ogg` produces audio artifacts. Even though they are inaudible, they can be easily seen on spectrograms.
