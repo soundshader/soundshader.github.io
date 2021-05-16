@@ -4,7 +4,7 @@ import { FFT } from '../audio/fft.js';
 const ARGS = new URLSearchParams(location.search);
 const SAMPLE_RATE = +ARGS.get('srate') || 48000;
 const USE_WDF = +ARGS.get('wdf') || 0;
-const FFT_SIZE = +ARGS.get('bins') || (USE_WDF ? 2048 : 1024);
+const FFT_SIZE = +ARGS.get('bins') || 1024;
 const NUM_FREQS = +ARGS.get('ch') || 1024;
 const NUM_FRAMES = +ARGS.get('cw') || 1024;
 // On 48 kHz audio, FFT_SIZE/2 bins maps to 24 kHz.
@@ -84,7 +84,7 @@ async function renderFFT() {
     fftCToken.cancelled = true;
   fftCToken = {};
   let ctoken = fftCToken;
-  await sleep(10);
+  await sleep(5);
 
   let n = FFT_SIZE;
   let nshifts = NUM_FREQS / (freqMax - freqMin);
@@ -94,6 +94,7 @@ async function renderFFT() {
   let tprev = Date.now();
   let ctx2d = canvasFFT.getContext('2d');
   let image = ctx2d.getImageData(0, 0, cw, ch);
+  let input0 = new Float32Array(n);
   let input1 = new Float32Array(n);
   let input2 = new Float32Array(n * 2); // (re, im), im = 0
   let input3 = new Float32Array(n * 2); // input2 shifted
@@ -114,8 +115,11 @@ async function renderFFT() {
 
   for (let x = xmin; x <= xmax; x++) {
     let offset = aviewport.min + x * step | 0;
-    getZeroPaddedSlice(audio32, offset - n / 2, offset + n / 2, input1);
-    if (USE_WDF) applyWDF(input1);
+    getZeroPaddedSlice(audio32, offset - n / 2, offset + n / 2, input0);
+    if (USE_WDF)
+      applyWDF(input0, input1);
+    else
+      input1.set(input0);
     if (USE_WINFN) applyHannWindow(input1);
     FFT.expand(input1, input2);
     let frame = getSqrAmpFrame(x);
@@ -141,29 +145,31 @@ async function renderFFT() {
     // WDF is already squared.
     if (USE_WDF) applyFn(frame, Math.sqrt);
 
-    if (Date.now() > tprev + 250) {
+    if (Date.now() > tprev + 150) {
       log.v('FFT progress:', x / cw * 100 | 0, '%');
-      await sleep(10);
+      await sleep(5);
       tprev = Date.now();
-      if (ctoken.cancelled) return;
+      if (ctoken.cancelled) {
+        log.i('FFT cancelled');
+        return;
+      }
     }
   }
 
-  let gmax = -Infinity;
+  let gmax = 0;
   for (let i = 0; i < fftSqrAmp.length; i++)
-    gmax = Math.max(gmax, loudness(fftSqrAmp[i]));
+    gmax = Math.max(gmax, fftSqrAmp[i]);
 
   for (let x = 0; x < cw; x++) {
     let frame = getSqrAmpFrame(x);
     let hue = getSpectrumColor(frame); // 0..1
     let fmax = 0;
-
     for (let y = 0; y < frame.length; y++)
       fmax = Math.max(fmax, frame[y]);
 
     for (let y = 0; y < ch; y++) {
       let a = frame[ch - y - 1];
-      let vol = clamp(loudness(a) - gmax + 1);
+      let vol = clamp(loudness(a) - loudness(gmax) + 1);
       let sat = 1 - a / fmax;
       let [r, g, b] = hsv2rgb(hue, sat, vol);
       let offset = (y * cw + x) * 4;
@@ -194,14 +200,19 @@ function getSqrAmpFrame(x) {
   return fftSqrAmp.subarray(x * n, (x + 1) * n);
 }
 
-function applyWDF(wave) {
-  let n = wave.length;
-  for (let i = 0; i < n / 2; i++)
-    wave[i] *= wave[n - 1 - i];
-  for (let i = 0, j = n / 4; j < n / 2; i += 2, j++)
-    wave[i] = wave[i + 1] = wave[j];
-  for (let i = 0; i < n / 2; i++)
-    wave[n - 1 - i] = wave[i];
+function interpolate(src, x) {
+  if (!fract(x)) return src[x];
+  let i = x | 0, j = i + 1;
+  return src[i] * (j - x) + src[j] * (x - i);
+}
+
+function applyWDF(src, res) {
+  let n = src.length;
+  assert(res.length == n);
+  for (let i = 0; i < n; i++) {
+    let j = i / 2 + n / 4;
+    res[i] = interpolate(src, j) * interpolate(src, n - 1 - j);
+  }
 }
 
 function applyHannWindow(frame) {
