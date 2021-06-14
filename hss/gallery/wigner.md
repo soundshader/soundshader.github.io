@@ -1,10 +1,10 @@
-# Wigner transform for dummies
+# WDF-based spectrograms
 
 GitHub: [soundshader.github.io](https://github.com/soundshader/soundshader.github.io)
 
 Demo: [soundshader.github.io/hss?wdf=1](https://soundshader.github.io/hss?wdf=1)
 
-> In the demo you'll need to skillfully use keys WASD and QERF to move around and zoom-in/zoom-out.
+> You'll need to skillfully use WASD and QERF keys to move around and zoom-in/zoom-out.
 
 As I was looking for interesting audio transforms, I came across the [Wigner distribution function](https://en.wikipedia.org/wiki/Wigner_distribution_function) (or just WDF). The example on Wikipedia looks indeed interesting and it's "sold" as a function that "provides the highest possible temporal vs frequency resolution which is mathematically possible within the limitations of the uncertainty principle" and thus "when a signal is not time limited, its WDF is hard to implement." Turns out, WDF isn't much harder to implement than plain FFT.
 
