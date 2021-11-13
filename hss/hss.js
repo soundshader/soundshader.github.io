@@ -45,6 +45,9 @@ let audioCtxStartTime = 0;
 let vTimeBarAnimationId = 0;
 let fftSqrAmpPos = 0; // NUM_FRAMES starting from here in abuffer.
 let fftSqrAmpLen = 0;
+let micAudioStream = null;
+let mediaRecorder = null;
+let micAudioChunks = null;
 
 function assert(x) {
   if (x) return;
@@ -304,29 +307,78 @@ function setShortcut(key, spec) {
   vButtons.append(button);
 }
 
+async function prepareAudioBuffer(arrayBuffer) {
+  log.v('Decoding audio data...');
+  initAudioCtx();
+  abuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  log.i('Audio buffer:',
+    abuffer.numberOfChannels, 'ch',
+    'x', abuffer.sampleRate, 'Hz',
+    abuffer.duration.toFixed(1), 'sec');
+
+  audio32 = abuffer.getChannelData(0);
+  aviewport.min = 0;
+  aviewport.len = Math.min(audio32.length, 10 * SAMPLE_RATE);
+  await renderFFT();
+}
+
+function initAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new AudioContext({
+      sampleRate: SAMPLE_RATE,
+    });
+  }
+}
+
 function defineShortcuts() {
   setShortcut('\uD83D\uDCC2', {
     title: 'Upload audio',
     handler: async () => {
-      audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      initAudioCtx();
       let file = await selectAudioFile();
       if (!file) return;
       document.title = file.name;
       log.i('Selected file:', file.type,
         file.size / 2 ** 10 | 0, 'KB', file.name);
-
       let fileData = await file.arrayBuffer();
-      log.v('Decoding audio data...');
-      abuffer = await audioCtx.decodeAudioData(fileData);
-      log.i('Audio buffer:',
-        abuffer.numberOfChannels, 'ch',
-        'x', abuffer.sampleRate, 'Hz',
-        abuffer.duration.toFixed(1), 'sec');
+      await prepareAudioBuffer(fileData);
+    },
+  });
 
-      audio32 = abuffer.getChannelData(0);
-      aviewport.min = 0;
-      aviewport.len = Math.min(audio32.length, 10 * SAMPLE_RATE);
-      await renderFFT();
+  setShortcut('\uD83C\uDFA4', {
+    title: 'Record mic audio',
+    handler: async () => {
+      if (!mediaRecorder) {
+        log.i('Calling getUserMedia for mic access');
+        micAudioStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: SAMPLE_RATE,
+            channelCount: 1,
+          },
+        });
+        if (!micAudioStream) return;
+        log.i('Starting MediaRecorder');
+        mediaRecorder = new MediaRecorder(micAudioStream);
+        micAudioChunks = [];
+        mediaRecorder.ondataavailable =
+          (e) => void micAudioChunks.push(e.data);
+        mediaRecorder.start();
+      } else {
+        log.i('Stopping MediaRecorder');
+        mediaRecorder.onstop = async () => {
+          let mime = mediaRecorder.mimeType;
+          let size = micAudioChunks.reduce((s, b) => s + b.size, 0);
+          micAudioStream.getAudioTracks().map(t => t.stop());
+          mediaRecorder = null;
+          micAudioStream = null;
+          log.i('Prepairing a media blob', mime, 'with',
+            micAudioChunks.length, 'chunks', size / 2 ** 10 | 0, 'KB total');
+          let blob = new Blob(micAudioChunks, { type: mime })
+          let blobData = await blob.arrayBuffer();
+          await prepareAudioBuffer(blobData);
+        };
+        mediaRecorder.stop();
+      }
     },
   });
 
