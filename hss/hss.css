@@ -30,9 +30,9 @@ body {
 
 #buttons button {
   padding: 0;
-  width: 2em;
-  height: 2em;
-  margin: 0.5em;
+  width: 4em;
+  height: 4em;
+  margin: 0.25em;
   font-weight: bold;
   border: 1px solid #888;
   cursor: pointer;

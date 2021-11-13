@@ -27,6 +27,7 @@ const mix = (min, max, x) => min * (1 - x) + max * x;
 const vTimeBar = $('#vtimebar');
 const canvasFFT = $('#fft');
 const eInfo = $('#info');
+const vButtons = $('#buttons');
 const fft = new FFT(FFT_SIZE);
 const fftSqrAmp = new Float32Array(NUM_FRAMES * NUM_FREQS);
 
@@ -36,6 +37,7 @@ canvasFFT.width = NUM_FRAMES;
 let audioCtx = null;
 let abuffer = null;
 let audio32 = null;
+let shortcuts = {}; // 'A' -> function
 let aviewport = { min: 0, len: 0 };
 let fftCToken = { cancelled: false };
 let audioCtxStartTime = 0;
@@ -271,6 +273,134 @@ function drawVerticalLine() {
     cancelAnimationFrame(vTimeBarAnimationId);
 }
 
+async function refreshViewport() {
+  aviewport.min = Math.max(0, aviewport.min | 0);
+  aviewport.len = Math.min(audio32.length - aviewport.min, aviewport.len | 0);
+  await renderFFT();
+}
+
+function setShortcut(key, spec) {
+  assert(!shortcuts[key]);
+  assert(spec.handler);
+  assert(spec.title);
+  shortcuts[key] = spec;
+  let button = document.createElement('button');
+  button.setAttribute('title', spec.title);
+  button.textContent = key;
+  button.onclick = () => shortcuts[key].handler();
+  vButtons.append(button);
+}
+
+function defineShortcuts() {
+  setShortcut('\uD83D\uDCC2', {
+    title: 'Upload audio',
+    handler: async () => {
+      audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      let file = await selectAudioFile();
+      if (!file) return;
+      document.title = file.name;
+      log.i('Selected file:', file.type,
+        file.size / 2 ** 10 | 0, 'KB', file.name);
+
+      let fileData = await file.arrayBuffer();
+      log.v('Decoding audio data...');
+      abuffer = await audioCtx.decodeAudioData(fileData);
+      log.i('Audio buffer:',
+        abuffer.numberOfChannels, 'ch',
+        'x', abuffer.sampleRate, 'Hz',
+        abuffer.duration.toFixed(1), 'sec');
+
+      audio32 = abuffer.getChannelData(0);
+      aviewport.min = 0;
+      aviewport.len = Math.min(audio32.length, 10 * SAMPLE_RATE);
+      await renderFFT();
+      playAudioSample(abuffer);
+    },
+  });
+
+  setShortcut('A', {
+    title: 'Move backwards',
+    handler: () => {
+      let dx = aviewport.len / 2;
+      aviewport.min -= dx / 2;
+      refreshViewport();
+    },
+  });
+
+  setShortcut('D', {
+    title: 'Move forward',
+    handler: () => {
+      let dx = aviewport.len / 2;
+      aviewport.min += dx / 2;
+      refreshViewport();
+    },
+  });
+
+  setShortcut('Q', {
+    title: 'Zoom in',
+    handler: () => {
+      let dx = aviewport.len / 2;
+      aviewport.min += dx / 2;
+      aviewport.len *= 0.5;
+      refreshViewport();
+    },
+  });
+
+  setShortcut('E', {
+    title: 'Zoom out',
+    handler: () => {
+      let dx = aviewport.len / 2;
+      aviewport.min -= dx;
+      aviewport.len *= 2;
+      refreshViewport();
+    },
+  });
+
+  setShortcut('F', {
+    title: 'Reduce max freq',
+    handler: () => {
+      let df = freqMax - freqMin;
+      if (freqMax - df / 2 <= freqMin) return;
+      freqMax -= df / 2;
+      log.v('New max freq:', freqMax / FFT_SIZE * 2);
+      refreshViewport();
+    },
+  });
+
+  setShortcut('R', {
+    title: 'Increase max freq',
+    handler: () => {
+      let df = freqMax - freqMin;
+      if (freqMax + df > FFT_SIZE / 2) return;
+      freqMax += df;
+      log.v('New max freq:', freqMax / FFT_SIZE * 2);
+      refreshViewport();
+    },
+  });
+
+  setShortcut('W', {
+    title: 'Increase freq min..max window',
+    handler: () => {
+      let df = freqMax - freqMin;
+      freqMax = Math.min(FFT_SIZE / 2, freqMax + df / 2);
+      freqMin = freqMax - df;
+      log.v('New min freq:', freqMin / FFT_SIZE * 2);
+      refreshViewport();
+    },
+  });
+
+  setShortcut('S', {
+    title: 'Shrink freq min..max window',
+    handler: () => {
+      let df = freqMax - freqMin;
+      freqMin = Math.max(0, freqMin - df / 2);
+      freqMax = freqMin + df;
+      log.v('New min freq:', freqMin / FFT_SIZE * 2);
+      refreshViewport();
+    },
+  });
+}
+
 canvasFFT.onmousemove = e => {
   if (!abuffer) return;
   let x = e.offsetX / canvasFFT.clientWidth;
@@ -282,29 +412,6 @@ canvasFFT.onmousemove = e => {
     + hz.toFixed(0) + ' Hz '
     + a2.toExponential(1);
 };
-
-$('#upload').addEventListener('click', async (e) => {
-  audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-  let file = await selectAudioFile();
-  if (!file) return;
-  document.title = file.name;
-  log.i('Selected file:', file.type,
-    file.size / 2 ** 10 | 0, 'KB', file.name);
-
-  let fileData = await file.arrayBuffer();
-  log.v('Decoding audio data...');
-  abuffer = await audioCtx.decodeAudioData(fileData);
-  log.i('Audio buffer:',
-    abuffer.numberOfChannels, 'ch',
-    'x', abuffer.sampleRate, 'Hz',
-    abuffer.duration.toFixed(1), 'sec');
-
-  audio32 = abuffer.getChannelData(0);
-  aviewport.min = 0;
-  aviewport.len = Math.min(audio32.length, 10 * SAMPLE_RATE);
-  await renderFFT();
-  playAudioSample(abuffer);
-});
 
 canvasFFT.onclick = (e) => {
   if (!abuffer) return;
@@ -325,65 +432,10 @@ canvasFFT.onclick = (e) => {
 
 document.body.onkeypress = async (e) => {
   let key = e.key.toUpperCase();
-  let dx = aviewport.len / 2;
-  let df = freqMax - freqMin;
-  let changed = false;
-
-  switch (key) {
-    case 'A':
-      log.v('Moving backward by', dx / 2, 'samples');
-      aviewport.min -= dx / 2;
-      changed = true;
-      break;
-    case 'D':
-      log.v('Moving forward by', dx / 2, 'samples');
-      aviewport.min += dx / 2;
-      changed = true;
-      break;
-    case 'Q':
-      log.v('Zooming in 2x');
-      aviewport.min += dx / 2;
-      aviewport.len *= 0.5;
-      changed = true;
-      break;
-    case 'E':
-      log.v('Zooming out 2x');
-      aviewport.min -= dx;
-      aviewport.len *= 2;
-      changed = true;
-      break;
-    case 'F':
-      if (freqMax - df / 2 <= freqMin) break;
-      freqMax -= df / 2;
-      log.v('New max freq:', freqMax / FFT_SIZE * 2);
-      changed = true;
-      break;
-    case 'R':
-      if (freqMax + df > FFT_SIZE / 2) break;
-      freqMax += df;
-      log.v('New max freq:', freqMax / FFT_SIZE * 2);
-      changed = true;
-      break;
-    case 'W':
-      freqMax = Math.min(FFT_SIZE / 2, freqMax + df / 2);
-      freqMin = freqMax - df;
-      log.v('New min freq:', freqMin / FFT_SIZE * 2);
-      changed = true;
-      break;
-    case 'S':
-      freqMin = Math.max(0, freqMin - df / 2);
-      freqMax = freqMin + df;
-      log.v('New min freq:', freqMin / FFT_SIZE * 2);
-      changed = true;
-      break;
-  }
-
-  if (changed) {
-    aviewport.min = Math.max(0, aviewport.min | 0);
-    aviewport.len = Math.min(audio32.length - aviewport.min, aviewport.len | 0);
-    await renderFFT();
-  }
+  let spec = shortcuts[key];
+  if (spec) spec.handler();
 };
 
+defineShortcuts();
 drawVerticalLine();
 log.i('Ready');
