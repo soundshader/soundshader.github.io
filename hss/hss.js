@@ -17,6 +17,7 @@ let freqMin = +ARGS.get('fmin') || 0;
 // 1e-5 signal clearly. Can be tested on bird songs.
 const AMP2_LOG = +ARGS.get('alog') || 5;
 const USE_WINFN = +ARGS.get('winf') || (USE_WDF ? 1 : 0);
+const CONST_HUE = +ARGS.get('hue') || 0;
 
 const $ = s => document.querySelector(s);
 const sleep = dt => new Promise(resolve => setTimeout(resolve, dt));
@@ -168,7 +169,7 @@ async function renderFFT() {
 
   for (let x = 0; x < cw; x++) {
     let frame = getSqrAmpFrame(x);
-    let hue = getSpectrumColor(frame); // 0..1
+    let hue = CONST_HUE || getSpectrumColor(frame); // 0..1
     let fmax = 0;
     for (let y = 0; y < frame.length; y++)
       fmax = Math.max(fmax, frame[y]);
