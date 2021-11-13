@@ -40,6 +40,7 @@ let audio32 = null;
 let shortcuts = {}; // 'A' -> function
 let aviewport = { min: 0, len: 0 };
 let fftCToken = { cancelled: false };
+let playingAudioSource = null;
 let audioCtxStartTime = 0;
 let vTimeBarAnimationId = 0;
 let fftSqrAmpPos = 0; // NUM_FRAMES starting from here in abuffer.
@@ -251,26 +252,38 @@ function hsv2rgb(hue, sat = 1, val = 1) {
   return [r, g, b];
 }
 
-function playAudioSample(abuffer) {
+function playCurrentAudioSample() {
+  if (playingAudioSource) {
+    playingAudioSource.stop();
+    playingAudioSource = null;
+  }
+  let tmpbuf = audioCtx.createBuffer(1, aviewport.len, abuffer.sampleRate);
+  abuffer.copyFromChannel(tmpbuf.getChannelData(0), 0, aviewport.min);
   let source = audioCtx.createBufferSource();
-  source.buffer = abuffer;
+  source.buffer = tmpbuf;
   source.connect(audioCtx.destination);
   audioCtxStartTime = audioCtx.currentTime;
-  log.i('Playing audio at', audioCtxStartTime.toFixed(1), 's');
+  log.i('Playing audio sample', tmpbuf.duration.toFixed(1), 'sec');
   source.start();
+  playingAudioSource = source;
+  source.onended = () => {
+    playingAudioSource = null;
+    log.i('Done playing audio sample');
+  };
+  drawVerticalLine();
 }
 
 function drawVerticalLine() {
   cancelAnimationFrame(vTimeBarAnimationId);
+  if (!audioCtx) return;
   vTimeBarAnimationId = requestAnimationFrame(drawVerticalLine);
-  if (!abuffer) return;
   let at = audioCtx.currentTime - audioCtxStartTime;
-  let cp = at / abuffer.duration * audio32.length;
-  let dt = (cp - aviewport.min) / aviewport.len;
+  let vd = aviewport.len / abuffer.sampleRate;
+  let dt = at / vd;
   vTimeBar.style.left = (100 * dt).toFixed(2) + '%';
-  vTimeBar.style.visibility = dt < 0 || dt > 1 ? 'hidden' : 'visible';
-  if (at > abuffer.duration)
-    cancelAnimationFrame(vTimeBarAnimationId);
+  vTimeBar.style.visibility = dt < 0 || dt > 1 || !playingAudioSource ?
+    'hidden' : 'visible';
+  if (dt > 1) cancelAnimationFrame(vTimeBarAnimationId);
 }
 
 async function refreshViewport() {
@@ -314,7 +327,13 @@ function defineShortcuts() {
       aviewport.min = 0;
       aviewport.len = Math.min(audio32.length, 10 * SAMPLE_RATE);
       await renderFFT();
-      playAudioSample(abuffer);
+    },
+  });
+
+  setShortcut('\u25B6', {
+    title: 'Play audio',
+    handler: () => {
+      playCurrentAudioSample();
     },
   });
 
@@ -437,5 +456,4 @@ document.body.onkeypress = async (e) => {
 };
 
 defineShortcuts();
-drawVerticalLine();
 log.i('Ready');
