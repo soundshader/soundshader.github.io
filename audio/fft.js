@@ -108,8 +108,9 @@ export class FFT {
   }
 
   // https://en.wikipedia.org/wiki/Autocorrelation
-  static auto_cf(src, res) {
+  static auto_cf(src, res, mask = null) {
     res = FFT.forward(src, res);
+    if (mask) FFT.dot(mask, res, res);
     let sqr = FFT.sqr_abs(res);
     return FFT.inverse(FFT.expand(sqr), res);
   }

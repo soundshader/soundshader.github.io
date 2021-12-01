@@ -3,6 +3,7 @@ import { FFT } from '../audio/fft.js';
 import { GpuContext } from '../webgl/gpu-context.js';
 
 const ARGS = new URLSearchParams(location.search);
+const uarg = (s, v) => ARGS.get(s) == '' ? v : ARGS.get(s);
 const SAMPLE_RATE = +ARGS.get('srate') || 48000;
 const USE_WDF = +ARGS.get('wdf') || 0;
 let FFT_SIZE = +ARGS.get('bins') || 1024;
@@ -11,20 +12,25 @@ const NUM_FRAMES = +ARGS.get('cw') || 1024;
 // On 48 kHz audio, FFT_SIZE/2 bins maps to 24 kHz.
 // This is also the max possible value: FFT can't
 // detect frequencies higher than FFT_SIZE/2.
-let freqMax = +ARGS.get('fmax') || FFT_SIZE / 4;
+let freqMax = +ARGS.get('fmax') || FFT_SIZE / 2;
 let freqMin = +ARGS.get('fmin') || 0;
 // 5.0 means the 0..255 rgba range maps to 1e-5..1.0.
 // This seems excessive, but ear is able to hear the
 // 1e-5 signal clearly. Can be tested on bird songs.
-const AMP2_LOG = +ARGS.get('alog') || 5;
+const AMP2_LOG = +uarg('alog', 5);
 const USE_WINFN = ARGS.get('winf') != '0';
 const USE_GPU = ARGS.get('gpu') == 1;
+const BASE_FREQ = 432; // Hz
+const FREQ_LOW = +ARGS.get('f_low') || 54; // Hz
 
 const $ = s => document.querySelector(s);
 const sleep = dt => new Promise(resolve => setTimeout(resolve, dt));
 const clamp = (x, min = 0, max = 1) => x < min ? min : x > max ? max : x;
 const fract = (x) => x - Math.floor(x);
 const mix = (min, max, x) => min * (1 - x) + max * x;
+const min = Math.min;
+const max = Math.max;
+const hann = x => x > 0 && x < 1 ? Math.sin(Math.PI * x) ** 2 : 0;
 
 const vTimeBar = $('#vtimebar');
 const canvasFFT = $('#fft');
@@ -55,7 +61,8 @@ let micAudioChunks = null;
 let render_args = {
   image: null,
   showPhase: false,
-  showIsolines: false,
+  showPolarCoords: false,
+  showACF: false,
   amp2max: 0,
   fft: {
     fbins: NUM_FREQS,
@@ -63,6 +70,10 @@ let render_args = {
     phase: new Float32Array(NUM_FRAMES * NUM_FREQS), // -pi..pi
     sqr_amp: new Float32Array(NUM_FRAMES * NUM_FREQS),
     loudness: new Float32Array(NUM_FRAMES * NUM_FREQS),
+    // ACF specific:
+    hue_r: new Float32Array(NUM_FRAMES * NUM_FREQS),
+    hue_g: new Float32Array(NUM_FRAMES * NUM_FREQS),
+    hue_b: new Float32Array(NUM_FRAMES * NUM_FREQS),
   },
 };
 
@@ -111,8 +122,10 @@ function getZeroPaddedSlice(src, min, max,
   return res;
 }
 
-function loudness(amp2) {
-  return amp2 <= 0 ? -Infinity : Math.log10(amp2) / AMP2_LOG;
+function loudness(x) {
+  return !AMP2_LOG ? x :
+    x > 0 ? 1 + Math.log10(x) / AMP2_LOG :
+      -Infinity;
 }
 
 async function renderFFT() {
@@ -160,17 +173,24 @@ class SmoothFFT {
 
 function updateFFT() {
   let n = FFT_SIZE;
+  let f_low = Math.ceil(FREQ_LOW / SAMPLE_RATE * n);
   let nshifts = NUM_FREQS / (freqMax - freqMin);
-  let cw = canvasFFT.width;
-  let time_step = aviewport.len / cw;
+  let time_step = aviewport.len / NUM_FRAMES;
   let input0 = new Float32Array(n);
   let input1 = new Float32Array(n);
   let input2 = new Float32Array(n * 2); // (re, im), im = 0
   let output = new Float32Array(n * 2 * nshifts);
-  let sfft = new SmoothFFT(NUM_FREQS, nshifts);
+  let output2 = new Float32Array(n * 2);
+  let amp_0_mask = new Float32Array(n * 2);
+  let hue_r_mask = new Float32Array(n * 2);
+  let hue_g_mask = new Float32Array(n * 2);
+  let hue_b_mask = new Float32Array(n * 2);
+  let sfft = new SmoothFFT(null, nshifts);
+  let xmin = 0, xmax = NUM_FRAMES - 1;
 
-  let xmin = 0, xmax = cw - 1;
-  if (fftSqrAmpLen != aviewport.len) {
+  assert(nshifts == 1 || !render_args.showACF);
+
+  if (fftSqrAmpLen != aviewport.len || render_args.showACF) {
     render_args.fft.sqr_amp.fill(0);
     render_args.fft.phase.fill(0);
   } else {
@@ -180,8 +200,28 @@ function updateFFT() {
     if (s > 0) xmin = s;
     if (s < 0) xmax = -s;
   }
+
   fftSqrAmpPos = aviewport.min;
   fftSqrAmpLen = aviewport.len;
+
+  if (render_args.showACF) {
+    assert(n / 2 == NUM_FREQS);
+    for (let f = 1; f < n / 2; f++) {
+      let hue = getFreqHue(f);
+      let val = f > 2 * f_low ? 1 : hann(0.5 * f / f_low - 0.5);
+      let [r, g, b] = hsv2rgb(hue, 1.0, val);
+
+      amp_0_mask[2 * f] = val;
+      hue_r_mask[2 * f] = r;
+      hue_g_mask[2 * f] = g;
+      hue_b_mask[2 * f] = b;
+
+      amp_0_mask[2 * (n - f)] = val;
+      hue_r_mask[2 * (n - f)] = r;
+      hue_g_mask[2 * (n - f)] = g;
+      hue_b_mask[2 * (n - f)] = b;
+    }
+  }
 
   for (let x = xmin; x <= xmax; x++) {
     let offset = aviewport.min + x * time_step | 0;
@@ -196,15 +236,30 @@ function updateFFT() {
       applyHannWindow(input1);
 
     FFT.expand(input1, input2);
-    sfft.transform(input2, output);
 
     let amp_frame = getSqrAmpFrame(x);
     let phase_frame = getPhaseFrame(x);
+
+    if (render_args.showACF) {
+      FFT.auto_cf(input2, output, amp_0_mask);
+    } else {
+      sfft.transform(input2, output);
+    }
+
     FFT.sqr_abs(output, amp_frame);
     FFT.phase(output, phase_frame);
 
-    // WDF is already squared.
-    if (USE_WDF) {
+    if (render_args.showACF) {
+      FFT.auto_cf(input2, output, hue_r_mask);
+      FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_r));
+      FFT.auto_cf(input2, output, hue_g_mask);
+      FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_g));
+      FFT.auto_cf(input2, output, hue_b_mask);
+      FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_b));
+    }
+
+    if (USE_WDF || render_args.showACF) {
+      // WDF/ACF is already squared.
       applyFn(amp_frame, Math.sqrt);
     }
   }
@@ -218,35 +273,55 @@ function updateLoudness() {
   render_args.fft.loudness.fill(0);
 
   for (let i = 0; i < sqramp.length; i++) {
-    let v = clamp(loudness(sqramp[i]) - loudness(render_args.amp2max) + 1);
+    let v = clamp(loudness(sqramp[i] / render_args.amp2max));
     render_args.fft.loudness[i] = v;
   }
 }
 
 function updateCanvas() {
-  let cw = canvasFFT.width;
-  let ch = canvasFFT.height;
+  let cw = NUM_FRAMES;
+  let ch = NUM_FREQS;
   let ctx2d = canvasFFT.getContext('2d');
   let image = ctx2d.getImageData(0, 0, cw, ch);
 
   image.data.fill(0);
 
-  for (let t = 0; t < cw; t++) {
-    let frame = getSqrAmpFrame(t);
-    let phase = getPhaseFrame(t);
-    let amp2max = getArrayMax(frame);
+  for (let x = 0; x < cw; x++) {
+    for (let y = 0; y < ch; y++) {
+      let t = x;
+      let f = ch - 1 - y;
 
-    for (let f = 0; f < ch; f++) {
-      let amp2 = frame[f];
-      let vol = render_args.fft.loudness[t * ch + f];
-      let sat = render_args.showPhase ? 1 : 1 - amp2 / render_args.amp2max;
+      if (render_args.showPolarCoords) {
+        let dx = 2 * x / cw - 1;
+        let dy = 2 * y / ch - 1;
+        let [dr, df] = xy2rf(-dy, dx);
+        t = dr * cw | 0;
+        f = Math.abs(df / Math.PI) * ch | 0;
+        if (t >= cw) continue;
+      }
+
+      let i = t * ch + f;
+      let frame = getSqrAmpFrame(t);
+      let phase = getPhaseFrame(t);
+      let amp2max = render_args.amp2max; // getArrayMax(frame);
+      let amp = frame[f] / amp2max;
+      let vol = render_args.fft.loudness[i];
+      let sat = render_args.showPhase ? 1 :
+        1 - amp;
       let hue = render_args.showPhase ?
         phase[f] / Math.PI * 0.5 + 0.5 :
         getFreqHue(f);
-      let y = render_args.showIsolines ?
-        Math.floor((1 - amp2 / render_args.amp2max) * ch) : ch - f - 1;
-      let offset = (y * cw + t) * 4;
       let [r, g, b] = hsv2rgb(hue, sat, vol);
+
+      if (render_args.showACF) {
+        vol = amp;
+        sat = 1 - vol;
+        r = mix(1, loudness(render_args.fft.hue_r[i] / amp2max), sat);
+        g = mix(1, loudness(render_args.fft.hue_g[i] / amp2max), sat);
+        b = mix(1, loudness(render_args.fft.hue_b[i] / amp2max), sat);
+      }
+
+      let offset = (y * cw + x) * 4;
       image.data[offset + 0] = r * 255;
       image.data[offset + 1] = g * 255;
       image.data[offset + 2] = b * 255;
@@ -275,10 +350,10 @@ function rotateArray(a, m) {
   if (m < 0) a.set(a.subarray(0, m), -m);
 }
 
-function getSqrAmpFrame(x) {
+function getSqrAmpFrame(x, src = render_args.fft.sqr_amp) {
   let n = NUM_FREQS;
   assert(x >= 0 && x < NUM_FRAMES);
-  return render_args.fft.sqr_amp.subarray(x * n, (x + 1) * n);
+  return src.subarray(x * n, (x + 1) * n);
 }
 
 function getPhaseFrame(x) {
@@ -304,17 +379,15 @@ function applyWDF(src, res) {
 
 function applyHannWindow(frame) {
   let n = frame.length;
-  for (let i = 0; i < n; i++) {
-    let s = Math.sin(Math.PI * i / n);
-    frame[i] *= (s * s);
-  }
+  for (let i = 0; i < n; i++)
+    frame[i] *= hann(i / n * 1000/1024);
 }
 
 function getFreqHue(y) {
   let f_max = SAMPLE_RATE * freqMax / FFT_SIZE;
   let f = y / NUM_FREQS * f_max;
-  let pitch = Math.log2(f / 432);
-  return pitch - Math.floor(pitch);
+  let pitch = Math.log2(f / BASE_FREQ);
+  return fract(pitch);
 }
 
 function hsv2rgb(hue, sat = 1, val = 1) {
@@ -331,6 +404,25 @@ function hsv2rgb(hue, sat = 1, val = 1) {
   let g = val * mix(Kx, clamp(py - Kx, 0, 1), sat);
   let b = val * mix(Kx, clamp(pz - Kx, 0, 1), sat);
   return [r, g, b];
+}
+
+function rgb2hsv(r, g, b) {
+  let v = max(r, max(g, b));
+  let c = v - min(r, min(g, b));
+  let h = c == 0 ? 0 :
+    v == r ? (g - b) / c :
+      v == g ? (b - r) / c + 2 :
+        v == b ? (r - g) / c + 4 : 0;
+  h = fract(h / 6 + 1);
+  let s = v > 0 ? c / v : 0;
+  return [h, s, v];
+}
+
+// f = -PI..PI
+function xy2rf(x, y) {
+  let r = Math.sqrt(x * x + y * y);
+  let f = r > 0 ? Math.sign(y) * Math.acos(x / r) : 0;
+  return [r, f];
 }
 
 function playCurrentAudioSample() {
@@ -580,10 +672,18 @@ function defineShortcuts() {
   });
 
   setShortcut('I', {
-    title: 'Show isolines',
+    title: 'Polar coords',
     handler: () => {
-      render_args.showIsolines = !render_args.showIsolines;
+      render_args.showPolarCoords = !render_args.showPolarCoords;
       updateCanvas();
+    },
+  });
+
+  setShortcut('L', {
+    title: 'Show ACF',
+    handler: () => {
+      render_args.showACF = !render_args.showACF;
+      renderFFT();
     },
   });
 }
@@ -630,4 +730,6 @@ document.body.onkeypress = async (e) => {
 };
 
 defineShortcuts();
-log.i('Ready');
+log.i('FFT size:', FFT_SIZE, 'bins');
+log.i('Img size:', NUM_FRAMES, 'frames x', NUM_FREQS, 'freqs');
+log.i('Hann window function?', USE_WINFN);
