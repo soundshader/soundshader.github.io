@@ -113,7 +113,7 @@ export class GpuFrameBuffer {
 
     let count = width * height * channels;
     let spec = `${width}x${height}x${channels}`;
-    let note = `${spec} = ${count >> 20} x float`;
+    let note = `${spec} = ${count >> 20}M x float`;
     let tmax = gl.getParameter(gl.MAX_TEXTURE_SIZE);
 
     log.i(`GPU buffer: ${note}`);

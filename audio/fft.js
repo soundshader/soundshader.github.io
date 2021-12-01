@@ -78,6 +78,22 @@ export class FFT {
     return res;
   }
 
+  // res[i] = -pi..pi
+  static phase(src, res) {
+    let n = src.length / 2;
+    res = res || src.slice(0, n);
+
+    for (let i = 0; i < n; i++) {
+      let re = src[2 * i];
+      let im = src[2 * i + 1];
+      let len = Math.sqrt(re * re + im * im);
+      let arg = len > 0 ? Math.sign(im) * Math.acos(re / len) : 0;
+      res[i] = arg;
+    }
+
+    return res;
+  }
+
   static sqr_abs_reim(src, res = src.slice(0)) {
     let n = src.length / 2;
 
@@ -144,7 +160,7 @@ export class FFT {
     return res;
   }
 
-  static shift(src, res = src.slice(0), phase = -1/2) {
+  static shift(src, res = src.slice(0), phase = -1 / 2) {
     let n = src.length / 2;
 
     for (let i = 0; i < n; i++) {
