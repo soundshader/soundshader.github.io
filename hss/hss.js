@@ -12,12 +12,12 @@ const NUM_FRAMES = +ARGS.get('cw') || 1024;
 // On 48 kHz audio, FFT_SIZE/2 bins maps to 24 kHz.
 // This is also the max possible value: FFT can't
 // detect frequencies higher than FFT_SIZE/2.
-let freqMax = +ARGS.get('fmax') || FFT_SIZE / 2;
+let freqMax = +ARGS.get('fmax') || FFT_SIZE / 4;
 let freqMin = +ARGS.get('fmin') || 0;
 // 5.0 means the 0..255 rgba range maps to 1e-5..1.0.
 // This seems excessive, but ear is able to hear the
 // 1e-5 signal clearly. Can be tested on bird songs.
-const AMP2_LOG = +uarg('alog', 5);
+const AMP2_LOG_INITIAL = +uarg('alog', 5);
 const USE_WINFN = ARGS.get('winf') != '0';
 const USE_GPU = ARGS.get('gpu') == 1;
 const BASE_FREQ = 432; // Hz
@@ -64,12 +64,13 @@ let render_args = {
   showPolarCoords: false,
   showACF: false,
   amp2max: 0,
+  amp2log: AMP2_LOG_INITIAL,
   fft: {
     fbins: NUM_FREQS,
     tbins: NUM_FRAMES,
     phase: new Float32Array(NUM_FRAMES * NUM_FREQS), // -pi..pi
     sqr_amp: new Float32Array(NUM_FRAMES * NUM_FREQS),
-    loudness: new Float32Array(NUM_FRAMES * NUM_FREQS),
+    max_amp: new Float32Array(NUM_FRAMES),
     // ACF specific:
     hue_r: new Float32Array(NUM_FRAMES * NUM_FREQS),
     hue_g: new Float32Array(NUM_FRAMES * NUM_FREQS),
@@ -123,8 +124,8 @@ function getZeroPaddedSlice(src, min, max,
 }
 
 function loudness(x) {
-  return !AMP2_LOG ? x :
-    x > 0 ? 1 + Math.log10(x) / AMP2_LOG :
+  return !render_args.amp2log ? x :
+    x > 0 ? 1 + Math.log10(x) / render_args.amp2log :
       -Infinity;
 }
 
@@ -171,16 +172,29 @@ class SmoothFFT {
   }
 }
 
+function smoothACF(input, output, amp2mask, nshifts) {
+  assert(input.length * nshifts == output.length);
+  assert(input.length == amp2mask.length);
+  let n = input.length / 2;
+  let tmp2 = output.subarray(0, n * 2);
+  FFT.auto_cf(input, tmp2, amp2mask);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let s = nshifts / 2 - 1; s >= 0; s--) {
+      let j = i * nshifts / 2 + s;
+      output[j * 2 + 0] = tmp2[i * 2 + 0];
+      output[j * 2 + 1] = tmp2[i * 2 + 1];
+    }
+  }
+}
+
 function updateFFT() {
   let n = FFT_SIZE;
-  let f_low = Math.ceil(FREQ_LOW / SAMPLE_RATE * n);
   let nshifts = NUM_FREQS / (freqMax - freqMin);
   let time_step = aviewport.len / NUM_FRAMES;
   let input0 = new Float32Array(n);
   let input1 = new Float32Array(n);
-  let input2 = new Float32Array(n * 2); // (re, im), im = 0
+  let input2 = new Float32Array(n * 2);
   let output = new Float32Array(n * 2 * nshifts);
-  let output2 = new Float32Array(n * 2);
   let amp_0_mask = new Float32Array(n * 2);
   let hue_r_mask = new Float32Array(n * 2);
   let hue_g_mask = new Float32Array(n * 2);
@@ -188,10 +202,9 @@ function updateFFT() {
   let sfft = new SmoothFFT(null, nshifts);
   let xmin = 0, xmax = NUM_FRAMES - 1;
 
-  assert(nshifts == 1 || !render_args.showACF);
-
   if (fftSqrAmpLen != aviewport.len || render_args.showACF) {
     render_args.fft.sqr_amp.fill(0);
+    render_args.fft.max_amp.fill(0);
     render_args.fft.phase.fill(0);
   } else {
     let s = (aviewport.min - fftSqrAmpPos) / time_step | 0;
@@ -205,11 +218,12 @@ function updateFFT() {
   fftSqrAmpLen = aviewport.len;
 
   if (render_args.showACF) {
-    assert(n / 2 == NUM_FREQS);
+    let f_low = FREQ_LOW / SAMPLE_RATE * n;
+
     for (let f = 1; f < n / 2; f++) {
-      let hue = getFreqHue(f);
-      let val = f > 2 * f_low ? 1 : hann(0.5 * f / f_low - 0.5);
-      let [r, g, b] = hsv2rgb(hue, 1.0, val);
+      let hue = getPitch(f / n * SAMPLE_RATE); // 0..1
+      let val = f > 2 * f_low ? 1 : hann(0.5 * f / f_low - 0.5) ** 2;
+      let [r, g, b] = smooth_hsv2rgb(hue, 1.0, val);
 
       amp_0_mask[2 * f] = val;
       hue_r_mask[2 * f] = r;
@@ -241,7 +255,7 @@ function updateFFT() {
     let phase_frame = getPhaseFrame(x);
 
     if (render_args.showACF) {
-      FFT.auto_cf(input2, output, amp_0_mask);
+      smoothACF(input2, output, amp_0_mask, nshifts);
     } else {
       sfft.transform(input2, output);
     }
@@ -250,11 +264,11 @@ function updateFFT() {
     FFT.phase(output, phase_frame);
 
     if (render_args.showACF) {
-      FFT.auto_cf(input2, output, hue_r_mask);
+      smoothACF(input2, output, hue_r_mask, nshifts);
       FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_r));
-      FFT.auto_cf(input2, output, hue_g_mask);
+      smoothACF(input2, output, hue_g_mask, nshifts);
       FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_g));
-      FFT.auto_cf(input2, output, hue_b_mask);
+      smoothACF(input2, output, hue_b_mask, nshifts);
       FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_b));
     }
 
@@ -264,18 +278,19 @@ function updateFFT() {
     }
   }
 
-  updateLoudness();
+  updateAmpMaxArray();
 }
 
-function updateLoudness() {
-  let sqramp = render_args.fft.sqr_amp;
-  render_args.amp2max = getArrayMax(sqramp);
-  render_args.fft.loudness.fill(0);
+function updateAmpMaxArray() {
+  let a = render_args.fft.max_amp;
+  let s = 0;
 
-  for (let i = 0; i < sqramp.length; i++) {
-    let v = clamp(loudness(sqramp[i] / render_args.amp2max));
-    render_args.fft.loudness[i] = v;
+  for (let t = 0; t < NUM_FRAMES; t++) {
+    let frame_max = getArrayMax(getSqrAmpFrame(t));
+    a[t] = s = max(frame_max, s * 0.95);
   }
+
+  render_args.amp2max = getArrayMax(render_args.fft.sqr_amp);
 }
 
 function updateCanvas() {
@@ -288,6 +303,9 @@ function updateCanvas() {
 
   for (let x = 0; x < cw; x++) {
     for (let y = 0; y < ch; y++) {
+      let offset = (y * cw + x) * 4;
+      image.data[offset + 3] = 255;
+
       let t = x;
       let f = ch - 1 - y;
 
@@ -295,17 +313,17 @@ function updateCanvas() {
         let dx = 2 * x / cw - 1;
         let dy = 2 * y / ch - 1;
         let [dr, df] = xy2rf(-dy, dx);
-        t = dr * cw | 0;
-        f = Math.abs(df / Math.PI) * ch | 0;
-        if (t >= cw) continue;
+        t = dr * (cw - 1) | 0;
+        f = Math.abs(df / Math.PI) * (ch - 1) | 0;
+        if (t >= cw || f >= ch) continue;
       }
 
       let i = t * ch + f;
       let frame = getSqrAmpFrame(t);
       let phase = getPhaseFrame(t);
-      let amp2max = render_args.amp2max; // getArrayMax(frame);
+      let amp2max = render_args.fft.max_amp[t];
       let amp = frame[f] / amp2max;
-      let vol = render_args.fft.loudness[i];
+      let vol = loudness(render_args.fft.sqr_amp[i] / amp2max);
       let sat = render_args.showPhase ? 1 :
         1 - amp;
       let hue = render_args.showPhase ?
@@ -315,13 +333,12 @@ function updateCanvas() {
 
       if (render_args.showACF) {
         vol = amp;
-        sat = 1 - vol;
+        sat = render_args.amp2log > 0 ? 1 - vol ** 2 : 1;
         r = mix(1, loudness(render_args.fft.hue_r[i] / amp2max), sat);
         g = mix(1, loudness(render_args.fft.hue_g[i] / amp2max), sat);
         b = mix(1, loudness(render_args.fft.hue_b[i] / amp2max), sat);
       }
 
-      let offset = (y * cw + x) * 4;
       image.data[offset + 0] = r * 255;
       image.data[offset + 1] = g * 255;
       image.data[offset + 2] = b * 255;
@@ -380,14 +397,18 @@ function applyWDF(src, res) {
 function applyHannWindow(frame) {
   let n = frame.length;
   for (let i = 0; i < n; i++)
-    frame[i] *= hann(i / n * 1000/1024);
+    frame[i] *= hann(i / n);
+}
+
+function getPitch(freq_hz) {
+  let pitch = Math.log2(freq_hz / BASE_FREQ);
+  return fract(pitch);
 }
 
 function getFreqHue(y) {
-  let f_max = SAMPLE_RATE * freqMax / FFT_SIZE;
-  let f = y / NUM_FREQS * f_max;
-  let pitch = Math.log2(f / BASE_FREQ);
-  return fract(pitch);
+  let f_max_hz = SAMPLE_RATE * freqMax / FFT_SIZE;
+  let freq_hz = y / NUM_FREQS * f_max_hz;
+  return getPitch(freq_hz);
 }
 
 function hsv2rgb(hue, sat = 1, val = 1) {
@@ -406,6 +427,19 @@ function hsv2rgb(hue, sat = 1, val = 1) {
   return [r, g, b];
 }
 
+function smooth_hsv2rgb(hue, sat = 1, val = 1) {
+  let r = 3 * Math.min(hue, 1 - hue);
+  let g = 3 * Math.abs(hue - 1 / 3);
+  let b = 3 * Math.abs(hue - 2 / 3);
+  r = r > 1 ? 0 : 1 - hann(r / 2);
+  g = g > 1 ? 0 : 1 - hann(g / 2);
+  b = b > 1 ? 0 : 1 - hann(b / 2);
+  r = val * mix(1, r, sat) * val;
+  g = val * mix(1, g, sat) * val;
+  b = val * mix(1, b, sat) * val;
+  return [r, g, b];
+}
+
 function rgb2hsv(r, g, b) {
   let v = max(r, max(g, b));
   let c = v - min(r, min(g, b));
@@ -421,7 +455,7 @@ function rgb2hsv(r, g, b) {
 // f = -PI..PI
 function xy2rf(x, y) {
   let r = Math.sqrt(x * x + y * y);
-  let f = r > 0 ? Math.sign(y) * Math.acos(x / r) : 0;
+  let f = r > 0 ? (y < 0 ? -1 : 1) * Math.acos(x / r) : 0;
   return [r, f];
 }
 
@@ -559,7 +593,7 @@ function defineShortcuts() {
     },
   });
 
-  setShortcut('A', {
+  setShortcut('\u2190', {
     title: 'Move backwards',
     handler: () => {
       let dx = aviewport.len / 2;
@@ -568,7 +602,7 @@ function defineShortcuts() {
     },
   });
 
-  setShortcut('D', {
+  setShortcut('\u2192', {
     title: 'Move forward',
     handler: () => {
       let dx = aviewport.len / 2;
@@ -577,7 +611,7 @@ function defineShortcuts() {
     },
   });
 
-  setShortcut('Q', {
+  setShortcut('\u2295', {
     title: 'Zoom in',
     handler: () => {
       let dx = aviewport.len / 2;
@@ -587,7 +621,7 @@ function defineShortcuts() {
     },
   });
 
-  setShortcut('E', {
+  setShortcut('\u2296', {
     title: 'Zoom out',
     handler: () => {
       let dx = aviewport.len / 2;
@@ -597,7 +631,7 @@ function defineShortcuts() {
     },
   });
 
-  setShortcut('F', {
+  setShortcut('\u2193', {
     title: 'Reduce max freq',
     handler: () => {
       let df = freqMax - freqMin;
@@ -608,7 +642,7 @@ function defineShortcuts() {
     },
   });
 
-  setShortcut('R', {
+  setShortcut('\u2191', {
     title: 'Increase max freq',
     handler: () => {
       let df = freqMax - freqMin;
@@ -671,7 +705,7 @@ function defineShortcuts() {
     },
   });
 
-  setShortcut('I', {
+  setShortcut('\u25D4', {
     title: 'Polar coords',
     handler: () => {
       render_args.showPolarCoords = !render_args.showPolarCoords;
@@ -679,11 +713,30 @@ function defineShortcuts() {
     },
   });
 
-  setShortcut('L', {
+  setShortcut('ACF', {
     title: 'Show ACF',
     handler: () => {
       render_args.showACF = !render_args.showACF;
       renderFFT();
+    },
+  });
+
+  setShortcut('L+', {
+    title: 'Increase loudness range',
+    handler: () => {
+      render_args.amp2log += 0.5;
+      log.i('Loudness log range:', render_args.amp2log);
+      updateCanvas();
+    },
+  });
+
+  setShortcut('L-', {
+    title: 'Reduce loudness range',
+    handler: () => {
+      if (render_args.amp2log > 0.5)
+        render_args.amp2log -= 0.5;
+      log.i('Loudness log range:', render_args.amp2log);
+      updateCanvas();
     },
   });
 }

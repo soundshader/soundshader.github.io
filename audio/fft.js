@@ -110,9 +110,9 @@ export class FFT {
   // https://en.wikipedia.org/wiki/Autocorrelation
   static auto_cf(src, res, mask = null) {
     res = FFT.forward(src, res);
-    if (mask) FFT.dot(mask, res, res);
-    let sqr = FFT.sqr_abs(res);
-    return FFT.inverse(FFT.expand(sqr), res);
+    let sqr = FFT.sqr_abs_reim(res);
+    if (mask) FFT.dot(mask, sqr, sqr);
+    return FFT.inverse(sqr, res);
   }
 
   static dot(src1, src2, res = src1.slice(0)) {
