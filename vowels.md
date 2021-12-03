@@ -4,8 +4,6 @@
 
 Each picture below corresponds to a vowel from the table above. If a picture is missing, it's because Wikipedia doesn't provide a audio file for that vowel. How are these pictures generated? By creatively transforming FFT of the audio file. Rougly speaking, the radial coordinate corresponds to time, the angular coordinate corresponds to frequency and color correponds to [pitch](https://en.wikipedia.org/wiki/Pitch_%28music%29) or musical note. Pictures are reversible: they contain enough information to recreate the original audio. If you want to listen to audio, find the corresponding vowel in the Wikipedia table.
 
-Questions or ideas? My email: 𝛓𝛓𝖌𝖍@𝝁𝝁·𝛓𝛕 (use latin letters to type it).
-
 ## Unrounded vowels
 
  . | Front | Central | Back
