@@ -1,10 +1,10 @@
 # Visualising sound with ACF
 
-1. [The AutoCorrelation Function](soundshader.github.io/acf)
-1. [Gallery of ACF images](soundshader.github.io/gallery)
-1. [Highres spectrograms with the DFT Shift Theorem](soundshader.github.io/hss/gallery)
-1. [Wigner transform spectrograms](soundshader.github.io/hss/gallery/wigner)
-1. [Vowels and colored ACF](soundshader.github.io/vowels)
+1. [The AutoCorrelation Function](https://soundshader.github.io/acf)
+1. [Gallery of ACF images](https://soundshader.github.io/gallery)
+1. [Highres spectrograms with the DFT Shift Theorem](https://soundshader.github.io/hss/gallery)
+1. [Wigner transform spectrograms](https://soundshader.github.io/hss/gallery/wigner)
+1. [Vowels and colored ACF](https://soundshader.github.io/vowels)
 
 # Questions or ideas?
 
