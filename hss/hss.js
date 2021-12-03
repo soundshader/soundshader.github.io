@@ -31,6 +31,7 @@ const mix = (min, max, x) => min * (1 - x) + max * x;
 const min = Math.min;
 const max = Math.max;
 const hann = x => x > 0 && x < 1 ? Math.sin(Math.PI * x) ** 2 : 0;
+const hann_step = (x, a, b) => x < a ? 0 : x > b ? 1 : hann((x - a) / (b - a) * 0.5);
 
 const vTimeBar = $('#vtimebar');
 const canvasFFT = $('#fft');
@@ -140,10 +141,10 @@ class SmoothFFT {
     this.nshifts = nshifts;
     this.tmp1 = new Float32Array(gl_fft.size * 2);
     this.tmp2 = new Float32Array(gl_fft.size * 2);
+    this.tmp3 = new Float32Array(gl_fft.size * 2);
   }
 
-  transform(input, output) {
-    let nshifts = this.nshifts;
+  transform(input, output, nshifts = this.nshifts) {
     let tmp1 = this.tmp1;
     let tmp2 = this.tmp2;
 
@@ -170,19 +171,25 @@ class SmoothFFT {
       }
     }
   }
-}
 
-function smoothACF(input, output, amp2mask, nshifts) {
-  assert(input.length * nshifts == output.length);
-  assert(input.length == amp2mask.length);
-  let n = input.length / 2;
-  let tmp2 = output.subarray(0, n * 2);
-  FFT.auto_cf(input, tmp2, amp2mask);
-  for (let i = n - 1; i >= 0; i--) {
-    for (let s = nshifts / 2 - 1; s >= 0; s--) {
-      let j = i * nshifts / 2 + s;
-      output[j * 2 + 0] = tmp2[i * 2 + 0];
-      output[j * 2 + 1] = tmp2[i * 2 + 1];
+  smoothACF(input, output, amp2mask) {
+    let nshifts = this.nshifts;
+    let tmp2 = this.tmp2;
+    assert(input.length * nshifts == output.length);
+    assert(input.length == amp2mask.length);
+    FFT.auto_cf(input, tmp2, amp2mask);
+    this.stretch(tmp2, output, nshifts / 2);
+  }
+
+  stretch(input, output, k) {
+    assert(input.length * k <= output.length);
+    let n = input.length / 2;
+    for (let i = n - 1; i >= 0; i--) {
+      for (let s = k - 1; s >= 0; s--) {
+        let j = i * k + s;
+        output[j * 2 + 0] = input[i * 2 + 0];
+        output[j * 2 + 1] = input[i * 2 + 1];
+      }
     }
   }
 }
@@ -222,7 +229,7 @@ function updateFFT() {
 
     for (let f = 1; f < n / 2; f++) {
       let hue = getPitch(f / n * SAMPLE_RATE); // 0..1
-      let val = f > 2 * f_low ? 1 : hann(0.5 * f / f_low - 0.5) ** 2;
+      let val = hann_step(f / f_low, 1, 4) ** 2;
       let [r, g, b] = smooth_hsv2rgb(hue, 1.0, val);
 
       amp_0_mask[2 * f] = val;
@@ -255,7 +262,7 @@ function updateFFT() {
     let phase_frame = getPhaseFrame(x);
 
     if (render_args.showACF) {
-      smoothACF(input2, output, amp_0_mask, nshifts);
+      sfft.smoothACF(input2, output, amp_0_mask);
     } else {
       sfft.transform(input2, output);
     }
@@ -264,11 +271,11 @@ function updateFFT() {
     FFT.phase(output, phase_frame);
 
     if (render_args.showACF) {
-      smoothACF(input2, output, hue_r_mask, nshifts);
+      sfft.smoothACF(input2, output, hue_r_mask);
       FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_r));
-      smoothACF(input2, output, hue_g_mask, nshifts);
+      sfft.smoothACF(input2, output, hue_g_mask);
       FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_g));
-      smoothACF(input2, output, hue_b_mask, nshifts);
+      sfft.smoothACF(input2, output, hue_b_mask);
       FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_b));
     }
 
