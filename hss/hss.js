@@ -1,5 +1,5 @@
 import * as log from '../log.js';
-import { FFT } from '../audio/fft.js';
+import { FFT, AutoCF } from '../audio/fft.js';
 import { GpuContext } from '../webgl/gpu-context.js';
 
 const ARGS = new URLSearchParams(location.search);
@@ -40,7 +40,8 @@ const vButtons = $('#buttons');
 
 let gl_canvas = null;
 let gl_context = null;
-let gl_fft = null;
+let fft = null;
+let acf = null;
 
 canvasFFT.height = NUM_FREQS;
 canvasFFT.width = NUM_FRAMES;
@@ -86,7 +87,7 @@ function assert(x) {
 }
 
 function initFFT() {
-  if (gl_fft)
+  if (fft)
     return;
 
   if (USE_GPU) {
@@ -95,7 +96,8 @@ function initFFT() {
     gl_context.init();
   }
 
-  gl_fft = new FFT(FFT_SIZE, { webgl: gl_context });
+  fft = new FFT(FFT_SIZE, { webgl: gl_context });
+  acf = new AutoCF(fft);
 }
 
 async function selectAudioFile() {
@@ -131,24 +133,28 @@ function loudness(x) {
 }
 
 async function renderFFT() {
+  let t = Date.now();
   initFFT();
   updateFFT();
   updateCanvas();
+  log.i('Image updated:', Date.now() - t, 'ms');
 }
 
 class SmoothFFT {
-  constructor(nfreqs, nshifts) {
+  constructor(fft, nshifts) {
+    this.fft = fft;
     this.nshifts = nshifts;
-    this.tmp1 = new Float32Array(gl_fft.size * 2);
-    this.tmp2 = new Float32Array(gl_fft.size * 2);
-    this.tmp3 = new Float32Array(gl_fft.size * 2);
+    this.tmp1 = new Float32Array(fft.size * 2);
+    this.tmp2 = new Float32Array(fft.size * 2);
+    this.tmp3 = new Float32Array(fft.size * 2);
   }
 
   transform(input, output, nshifts = this.nshifts) {
+    let fft = this.fft;
     let tmp1 = this.tmp1;
     let tmp2 = this.tmp2;
 
-    assert(input.length == gl_fft.size * 2);
+    assert(input.length == fft.size * 2);
     assert(output.length == input.length * nshifts);
 
     // This is called shifted DFT. Normal DFT with 1024 bins
@@ -162,7 +168,7 @@ class SmoothFFT {
     // shifted DFTs gets a result almost identical to CWT.
     for (let s = 0; s < nshifts; s++) {
       FFT.shift(input, tmp1, -s / nshifts);
-      gl_fft.transform(tmp1, tmp2);
+      fft.transform(tmp1, tmp2);
 
       for (let i = 0; i < input.length / 2; i++) {
         let j = i * nshifts + s;
@@ -177,7 +183,7 @@ class SmoothFFT {
     let tmp2 = this.tmp2;
     assert(input.length * nshifts == output.length);
     assert(input.length == amp2mask.length);
-    FFT.auto_cf(input, tmp2, amp2mask);
+    acf.transform(input, tmp2, amp2mask);
     this.stretch(tmp2, output, nshifts / 2);
   }
 
@@ -206,7 +212,7 @@ function updateFFT() {
   let hue_r_mask = new Float32Array(n * 2);
   let hue_g_mask = new Float32Array(n * 2);
   let hue_b_mask = new Float32Array(n * 2);
-  let sfft = new SmoothFFT(null, nshifts);
+  let sfft = new SmoothFFT(fft, nshifts);
   let xmin = 0, xmax = NUM_FRAMES - 1;
 
   if (fftSqrAmpLen != aviewport.len || render_args.showACF) {
@@ -682,29 +688,29 @@ function defineShortcuts() {
     },
   });
 
-  setShortcut('N', {
+  setShortcut('F+', {
     title: '200% FFT bins',
     handler: () => {
       FFT_SIZE *= 2;
       freqMax *= 2;
       log.i('FFT bins:', FFT_SIZE, 'per frame');
-      gl_fft = null;
+      fft = null;
       renderFFT();
     },
   });
 
-  setShortcut('M', {
+  setShortcut('F-', {
     title: '50% FFT bins',
     handler: () => {
       FFT_SIZE *= 0.5;
       freqMax *= 0.5;
       log.i('FFT bins:', FFT_SIZE, 'per frame');
-      gl_fft = null;
+      fft = null;
       renderFFT();
     },
   });
 
-  setShortcut('P', {
+  setShortcut('\u267A', {
     title: 'Show phase',
     handler: () => {
       render_args.showPhase = !render_args.showPhase;
@@ -746,6 +752,10 @@ function defineShortcuts() {
       updateCanvas();
     },
   });
+}
+
+function showUnhandledError(err) {
+  $('#error').textContent = err && err.message || err;
 }
 
 canvasFFT.onmousemove = e => {
@@ -790,6 +800,8 @@ document.body.onkeypress = async (e) => {
 };
 
 defineShortcuts();
+log.setUnhandledErrorHandler(showUnhandledError);
 log.i('FFT size:', FFT_SIZE, 'bins');
-log.i('Img size:', NUM_FRAMES, 'frames x', NUM_FREQS, 'freqs');
+log.i('Image size:', NUM_FRAMES, 'x', NUM_FREQS);
 log.i('Hann window function?', USE_WINFN);
+log.i('GPU?', USE_GPU);

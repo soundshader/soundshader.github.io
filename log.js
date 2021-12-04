@@ -5,17 +5,22 @@ export const i = (...args) => record('I', args);
 export const w = (...args) => record('W', args);
 export const e = (...args) => record('E', args);
 
-window.addEventListener('error', (message, src, row, col, error) => {
-  e(message);
-  v(error);
-});
+export function setUnhandledErrorHandler(handler) {
+  window.addEventListener('error', (event, src, row, col, error) => {
+    let err = event && event.error || error;
+    e(err.stack);
+    v(err);
+    handler && handler(err);
+  });
 
-window.addEventListener('unhandledrejection', event => {
-  let error = event.reason;
-  e(error.message);
-  v(error);
-  event.preventDefault();
-});
+  window.addEventListener('unhandledrejection', event => {
+    event.preventDefault();
+    let error = event.reason;
+    e(error.stack);
+    v(error);
+    handler && handler(error);
+  });
+}
 
 export function download() {
   let blob = new Blob([lines.join('\n')], { type: 'text/plain' });

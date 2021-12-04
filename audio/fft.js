@@ -107,14 +107,6 @@ export class FFT {
     return res;
   }
 
-  // https://en.wikipedia.org/wiki/Autocorrelation
-  static auto_cf(src, res, mask = null) {
-    res = FFT.forward(src, res);
-    let sqr = FFT.sqr_abs_reim(res);
-    if (mask) FFT.dot(mask, sqr, sqr);
-    return FFT.inverse(sqr, res);
-  }
-
   static dot(src1, src2, res = src1.slice(0)) {
     let n = res.length / 2;
 
@@ -200,7 +192,7 @@ export class FFT {
     return revidx;
   }
 
-  constructor(size, { webgl } = {}) {
+  constructor(size, { webgl, layout } = {}) {
     if (!Number.isFinite(size) || size < 2 || (size & (size - 1)))
       throw new Error('FFT: ' + size + ' != 2**k');
 
@@ -221,7 +213,7 @@ export class FFT {
     if (webgl) {
       this.shader = new GpuFFT(webgl, {
         size: this.size,
-        revidx: this.revidx,
+        layout,
       });
     }
   }
@@ -310,6 +302,24 @@ export class FFT {
 
 FFT.instances = new Map; // FF doesn't support static fields
 FFT.revidxcache = new Map;
+
+// https://en.wikipedia.org/wiki/Autocorrelation
+export class AutoCF {
+  constructor(fft) {
+    this.fft = fft;
+    this.sqr = new Float32Array(2 * fft.size);
+  }
+
+  transform(src, res = src.slice(), mask = null) {
+    let fft = this.fft;
+    let sqr = this.sqr;
+    fft.transform(src, res);
+    FFT.sqr_abs_reim(res, sqr);
+    mask && FFT.dot(mask, sqr, sqr);
+    fft.inverse(sqr, res);
+    return res;
+  }
+}
 
 export class GpuFFT extends GpuTransformProgram {
   constructor(webgl, { size, width, height, layout }) {
