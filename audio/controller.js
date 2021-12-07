@@ -12,45 +12,61 @@ import { GpuWaveformProgram as GpuAcfAnalyzerProgram } from '../glsl/acf-analyze
 export class AudioController {
   constructor(canvas, { stats, fftSize }) {
     this.canvas = canvas;
+    this.webgl = null;
     this.stats = stats;
-    this.fftHalfSize = fftSize / 2;
+    this.fft_size = fftSize;
+    this.offsetMin = 0;
+    this.offsetMax = 0;
+    this.activeAudio = null;
+    this.rendererId = 0;
+    this.renderers = [];
+    this.waveform_fb = null;
   }
 
   init() {
-    let fftSize = this.fftHalfSize * 2;
-
     this.audioCtx = new AudioContext({
       sampleRate: vargs.SAMPLE_RATE * 1e3 | 0,
     });
-
-    this.analyser = this.audioCtx.createAnalyser();
-    this.analyser.fftSize = fftSize;
-
-    this.maxTime = this.fftHalfSize;
-    this.maxFreq = this.audioCtx.sampleRate / 2; // usually ~22.5 kHz
-    this.running = false;
-    this.started = false;
-    this.timeStep = 0;
-    this.waveform = new Float32Array(fftSize);
 
     this.initGpu();
     this.initMouse();
   }
 
+  canvasXtoT(offsetX) {
+    // log.assert(offsetX >= 0 && offsetX < this.canvas.clientHeight);
+    let x = offsetX / this.canvas.clientWidth;
+    return this.offsetMin * (1 - x) + this.offsetMax * x;
+  }
+
   initMouse() {
-    this.mouseX = 0;
-    this.mouseY = 0;
+    // this.mouseX = 0;
+    // this.mouseY = 0;
 
     if (!vargs.USE_MOUSE) return;
 
     this.canvas.onmousemove = e => {
-      let x = e.offsetX / this.canvas.clientWidth;
-      let y = e.offsetY / this.canvas.clientHeight;
+      if (e.offsetX < 0 || e.offsetX >= this.canvas.clientWidth) {
+        this.stats.textContent = '';
+      } else {
+        let t = this.canvasXtoT(e.offsetX);
+        stats.textContent = 'T+' + (t / this.audioCtx.sampleRate).toFixed(2) + 's';
+      }
+    };
 
-      this.mouseX = x * 2 - 1;
-      this.mouseY = 1 - y * 2;
+    this.canvas.onclick = e => {
+      let t = this.canvasXtoT(e.offsetX);
 
-      if (!this.running) {
+      if (e.ctrlKey && e.shiftKey) {
+        this.offsetMin = 0;
+        this.offsetMax = this.audioSamples.length;
+        requestAnimationFrame(() =>
+          this.drawFrame());
+      } else if (e.ctrlKey) {
+        this.offsetMin = t | 0;
+        requestAnimationFrame(() =>
+          this.drawFrame());
+      } else if (e.shiftKey) {
+        this.offsetMax = t | 0;
         requestAnimationFrame(() =>
           this.drawFrame());
       }
@@ -61,18 +77,10 @@ export class AudioController {
     this.webgl = new GpuContext(this.canvas);
     this.webgl.init();
 
-    window.gl = this.webgl.gl;
-
     let args = {
-      size: this.fftHalfSize,
-      waveformLen: this.waveform.length,
-      imgSize: this.canvas.width,
-      maxFreq: this.maxFreq,
-      logScale: vargs.FFT_LOG_SCALE,
+      fft_size: this.fft_size,
+      img_size: this.canvas.width,
     };
-
-    this.rendererId = 0;
-    this.renderers = [];
 
     let ctor = {
       acf: GpuAcfVisualizerProgram,
@@ -85,143 +93,85 @@ export class AudioController {
 
     this.renderers.push(
       new ctor(this.webgl, args));
+
+    // The audio wave is packed in a NxNx1 buffer.
+    // N here has nothing to do with FFT size.
+    this.waveform_fb = new GpuFrameBuffer(this.webgl,
+      { size: 4096 });
   }
 
   switchCoords() {
     let node = this.renderers[this.rendererId];
     node.flat = !node.flat;
     requestAnimationFrame(() =>
+      this.drawFrame(null));
+  }
+
+  drawFrame(input = this.waveform_fb) {
+    let node = this.renderers[this.rendererId];
+    let t_min = this.offsetMin - this.fft_size / 2;
+    let t_max = this.offsetMax - this.fft_size / 2;
+
+    node.exec({
+      uWaveFormFB: input,
+      uOffsetMin: t_min,
+      uOffsetMax: t_max,
+    }, null);
+  }
+
+  async start(audioStream, audioFile) {
+    log.i('Decoding audio data...');
+    let encodedAudio = await audioFile.arrayBuffer();
+    this.audioBuffer = await this.audioCtx.decodeAudioData(encodedAudio);
+    this.audioSamples = new Float32Array(this.audioBuffer.getChannelData(0))
+      .slice(0, this.waveform_fb.width * this.waveform_fb.height * this.waveform_fb.channels);
+    this.offsetMin = 0;
+    this.offsetMax = this.audioSamples.length;
+
+    this.waveform_fb.clear();
+    this.waveform_fb.upload(this.audioSamples); // send to GPU
+
+    log.i('Decoded sound:', this.fft_size, 'samples/batch',
+      '@', this.audioBuffer.sampleRate, 'Hz',
+      'x', this.audioBuffer.numberOfChannels, 'channels',
+      this.audioBuffer.duration.toFixed(1), 'sec');
+
+    requestAnimationFrame(() =>
       this.drawFrame());
   }
 
-  drawFrame(output = null) {
-    let node = this.renderers[this.rendererId];
-    let time = this.timeStep / this.maxTime;
-
-    node.exec({
-      uTime: time,
-      uMousePos: [this.mouseX, this.mouseY],
-      uWaveFormRaw: output && this.waveform,
-      uMaxTime: this.maxTime / 60, // audio captured at 60 fps
-      uMaxFreq: this.maxFreq,
-    }, output);
+  stop() {
+    this.stopAudio();
   }
 
-  async start(audioStream, audioFile, audioEl) {
-    if (vargs.PRELOAD && audioFile) {
-      log.i('Decoding audio data...');
-      let buffer = await audioFile.arrayBuffer();
-      let adata = await this.audioCtx.decodeAudioData(buffer);
-      this.audioSamples = new Float32Array(adata.getChannelData(0));
-      this.audioOffset = 0;
-
-      log.i('Decoded sound:', this.waveform.length, 'samples/batch',
-        '@', adata.sampleRate, 'Hz',
-        'x', adata.numberOfChannels, 'channels',
-        adata.duration, 'sec',
-        adata.length.toExponential(1), 'samples');
-    } else {
-      this.audioEl = audioEl;
-      this.stream = audioStream;
-      this.source = this.audioCtx.createMediaStreamSource(this.stream);
-      this.source.connect(this.analyser);
-
-      log.i('Input sound:', this.waveform.length, 'samples/batch',
-        '@', this.audioCtx.sampleRate, 'Hz',
-        'x', this.source.channelCount, 'channels',
-        (audioEl ? audioEl.duration : 0) | 0, 'sec');
-    }
-
-    this.started = true;
-    this.resume();
+  async playAudio() {
+    this.stopAudio();
+    let audioCtx = this.audioCtx;
+    let t_min = this.offsetMin;
+    let t_max = this.offsetMax;
+    let t_len = t_max - t_min;
+    let tmpbuf = audioCtx.createBuffer(1, t_len, audioCtx.sampleRate);
+    this.audioBuffer.copyFromChannel(tmpbuf.getChannelData(0), 0, t_min);
+    let source = audioCtx.createBufferSource();
+    source.buffer = tmpbuf;
+    source.connect(audioCtx.destination);
+    this.activeAudio = source;
+    log.i('Playing audio sample', tmpbuf.duration.toFixed(1), 'sec');
+    source.start();
+    return new Promise((resolve) => {
+      source.onended = () => {
+        this.activeAudio = null;
+        log.i('Done playing audio');
+        resolve();
+      };
+    });
   }
 
-  async stop() {
-    if (!this.started)
-      return;
-    this.pause();
-
-    if (this.source) {
-      this.source.disconnect();
-      this.source = null;
-    }
-
-    if (this.stream) {
-      let tracks = this.stream.getTracks();
-      tracks.map(t => t.stop());
-      this.stream = null;
-    }
-
-    this.started = false;
-    log.i('Audio stopped');
-  }
-
-  pause() {
-    this.running = false;
-    this.audioEl && this.audioEl.pause();
-    clearInterval(this.timerId);
-    cancelAnimationFrame(this.animationId);
-    this.timerId = 0;
-    this.animationId = 0;
-    log.i('Audio paused');
-  }
-
-  resume() {
-    if (this.running)
-      return;
-
-    let time0 = 0;
-    let frames = 0;
-
-    this.timerId = setInterval(() => {
-      if (!this.running)
-        return;
-      this.timeStep++;
-      this.captureFrame();
-      this.drawFrame(GpuFrameBuffer.DUMMY);
-    }, 1000 / vargs.SHADER_FPS);
-
-    let animate = (time) => {
-      if (!this.running)
-        return;
-      this.drawFrame();
-      time0 = time0 || time;
-
-      if (time > time0 + 1000) {
-        let dt = (time - time0) / 1e3;
-        let fps = (this.timeStep - frames) / dt | 0;
-        let sr = this.audioCtx.sampleRate;
-        let nw = this.waveform.length;
-        let t = this.analyser.context.currentTime | 0;
-        let d = (this.audioEl ? this.audioEl.duration : 0) | 0;
-        // This awkward construct avoids re-creating DOM text nodes.
-        let node = this.stats.firstChild || this.stats;
-        node.textContent = `${fps} fps ${sr} Hz / ${nw} @ ${t} / ${d} s`;
-        time0 = time;
-        frames = this.timeStep;
-      }
-
-      this.animationId = requestAnimationFrame(animate);
-    };
-
-    this.running = true;
-    log.i('Audio resumed');
-
-    animate();
-
-    this.audioEl && this.audioEl.play();
-  }
-
-  captureFrame() {
-    if (this.audioSamples) {
-      this.waveform.set(
-        this.audioSamples.subarray(
-          this.audioOffset,
-          this.audioOffset + this.waveform.length));
-      let delta = this.audioCtx.sampleRate / vargs.SHADER_FPS;
-      this.audioOffset += Math.max(1, delta | 0);
-    } else {
-      this.analyser.getFloatTimeDomainData(this.waveform);
+  stopAudio() {
+    if (this.activeAudio) {
+      this.activeAudio.stop();
+      this.activeAudio.disconnect();
+      this.activeAudio = null;
     }
   }
 }

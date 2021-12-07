@@ -1,5 +1,5 @@
 import * as log from '../log.js';
-import { FFT, AutoCF } from '../audio/fft.js';
+import { FFT, GpuFFT, AutoCF } from '../audio/fft.js';
 import { GpuContext } from '../webgl/gpu-context.js';
 
 const ARGS = new URLSearchParams(location.search);
@@ -50,7 +50,7 @@ let audioCtx = null;
 let abuffer = null;
 let audio32 = null;
 let shortcuts = {}; // 'A' -> function
-let aviewport = { min: 0, len: 0 };
+let aviewport = { tmin: 0, tlen: 0 };
 let playingAudioSource = null;
 let audioCtxStartTime = 0;
 let vTimeBarAnimationId = 0;
@@ -65,7 +65,6 @@ let render_args = {
   showPhase: false,
   showPolarCoords: false,
   showACF: false,
-  amp2max: 0,
   amp2log: AMP2_LOG_INITIAL,
   fft: {
     fbins: NUM_FREQS,
@@ -126,9 +125,9 @@ function getZeroPaddedSlice(src, min, max,
   return res;
 }
 
-function loudness(x) {
-  return !render_args.amp2log ? x :
-    x > 0 ? 1 + Math.log10(x) / render_args.amp2log :
+function loudness(x, a_log = render_args.amp2log) {
+  return a_log <= 0 ? x :
+    x > 0 ? 1 + Math.log10(x) / a_log :
       -Infinity;
 }
 
@@ -203,7 +202,7 @@ class SmoothFFT {
 function updateFFT() {
   let n = FFT_SIZE;
   let nshifts = NUM_FREQS / (freqMax - freqMin);
-  let time_step = aviewport.len / NUM_FRAMES;
+  let time_step = aviewport.tlen / NUM_FRAMES;
   let input0 = new Float32Array(n);
   let input1 = new Float32Array(n);
   let input2 = new Float32Array(n * 2);
@@ -215,27 +214,30 @@ function updateFFT() {
   let sfft = new SmoothFFT(fft, nshifts);
   let xmin = 0, xmax = NUM_FRAMES - 1;
 
-  if (fftSqrAmpLen != aviewport.len || render_args.showACF) {
+  if (fftSqrAmpLen != aviewport.tlen || render_args.showACF) {
     render_args.fft.sqr_amp.fill(0);
     render_args.fft.max_amp.fill(0);
     render_args.fft.phase.fill(0);
+    render_args.fft.hue_r.fill(0);
+    render_args.fft.hue_g.fill(0);
+    render_args.fft.hue_b.fill(0);
   } else {
-    let s = (aviewport.min - fftSqrAmpPos) / time_step | 0;
+    let s = (aviewport.tmin - fftSqrAmpPos) / time_step | 0;
     rotateArray(render_args.fft.sqr_amp, s * NUM_FREQS);
     rotateArray(render_args.fft.phase, s * NUM_FREQS);
     if (s > 0) xmin = s;
     if (s < 0) xmax = -s;
   }
 
-  fftSqrAmpPos = aviewport.min;
-  fftSqrAmpLen = aviewport.len;
+  fftSqrAmpPos = aviewport.tmin;
+  fftSqrAmpLen = aviewport.tlen;
 
   if (render_args.showACF) {
     let f_low = FREQ_LOW / SAMPLE_RATE * n;
 
     for (let f = 1; f < n / 2; f++) {
       let hue = getPitch(f / n * SAMPLE_RATE); // 0..1
-      let val = hann_step(f / f_low, 1, 4) ** 2;
+      let val = 1.0; // hann_step(f / f_low, 0, 1) ** 2;
       let [r, g, b] = smooth_hsv2rgb(hue, 1.0, val);
 
       amp_0_mask[2 * f] = val;
@@ -251,7 +253,7 @@ function updateFFT() {
   }
 
   for (let x = xmin; x <= xmax; x++) {
-    let offset = aviewport.min + x * time_step | 0;
+    let offset = aviewport.tmin + x * time_step | 0;
     getZeroPaddedSlice(audio32, offset - n / 2, offset + n / 2, input0);
 
     if (USE_WDF)
@@ -268,26 +270,28 @@ function updateFFT() {
     let phase_frame = getPhaseFrame(x);
 
     if (render_args.showACF) {
-      sfft.smoothACF(input2, output, amp_0_mask);
+      // sfft.smoothACF(input2, output, amp_0_mask);
+      let r_frame = getSqrAmpFrame(x, render_args.fft.hue_r);
+      let g_frame = getSqrAmpFrame(x, render_args.fft.hue_g);
+      let b_frame = getSqrAmpFrame(x, render_args.fft.hue_b);
+
+      sfft.smoothACF(input2, output, hue_r_mask);
+      FFT.sqr_abs(output, r_frame);
+
+      sfft.smoothACF(input2, output, hue_g_mask);
+      FFT.sqr_abs(output, g_frame);
+
+      sfft.smoothACF(input2, output, hue_b_mask);
+      FFT.sqr_abs(output, b_frame);
+
+      applyFn(amp_frame, (a, i) =>
+        Math.sqrt(r_frame[i] + g_frame[i] + b_frame[i]));
     } else {
       sfft.transform(input2, output);
-    }
-
-    FFT.sqr_abs(output, amp_frame);
-    FFT.phase(output, phase_frame);
-
-    if (render_args.showACF) {
-      sfft.smoothACF(input2, output, hue_r_mask);
-      FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_r));
-      sfft.smoothACF(input2, output, hue_g_mask);
-      FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_g));
-      sfft.smoothACF(input2, output, hue_b_mask);
-      FFT.sqr_abs(output, getSqrAmpFrame(x, render_args.fft.hue_b));
-    }
-
-    if (USE_WDF || render_args.showACF) {
-      // WDF/ACF is already squared.
-      applyFn(amp_frame, Math.sqrt);
+      FFT.sqr_abs(output, amp_frame);
+      FFT.phase(output, phase_frame);
+      // WDF is already squared.
+      USE_WDF && applyFn(amp_frame, Math.sqrt);
     }
   }
 
@@ -302,8 +306,6 @@ function updateAmpMaxArray() {
     let frame_max = getArrayMax(getSqrAmpFrame(t));
     a[t] = s = max(frame_max, s * 0.95);
   }
-
-  render_args.amp2max = getArrayMax(render_args.fft.sqr_amp);
 }
 
 function updateCanvas() {
@@ -311,6 +313,7 @@ function updateCanvas() {
   let ch = NUM_FREQS;
   let ctx2d = canvasFFT.getContext('2d');
   let image = ctx2d.getImageData(0, 0, cw, ch);
+  let amp2log = render_args.amp2log;
 
   image.data.fill(0);
 
@@ -331,25 +334,26 @@ function updateCanvas() {
         if (t >= cw || f >= ch) continue;
       }
 
+      let r, g, b;
       let i = t * ch + f;
       let frame = getSqrAmpFrame(t);
       let phase = getPhaseFrame(t);
+
       let amp2max = render_args.fft.max_amp[t];
       let amp = frame[f] / amp2max;
-      let vol = loudness(render_args.fft.sqr_amp[i] / amp2max);
-      let sat = render_args.showPhase ? 1 :
-        1 - amp;
-      let hue = render_args.showPhase ?
-        phase[f] / Math.PI * 0.5 + 0.5 :
-        getFreqHue(f);
-      let [r, g, b] = hsv2rgb(hue, sat, vol);
 
       if (render_args.showACF) {
-        vol = amp;
-        sat = render_args.amp2log > 0 ? 1 - vol ** 2 : 1;
-        r = mix(1, loudness(render_args.fft.hue_r[i] / amp2max), sat);
-        g = mix(1, loudness(render_args.fft.hue_g[i] / amp2max), sat);
-        b = mix(1, loudness(render_args.fft.hue_b[i] / amp2max), sat);
+        let sat = render_args.amp2log > 0 ? 1 - amp ** 2 : 1;
+        r = mix(1, loudness(render_args.fft.hue_r[i] / amp2max, amp2log), sat);
+        g = mix(1, loudness(render_args.fft.hue_g[i] / amp2max, amp2log), sat);
+        b = mix(1, loudness(render_args.fft.hue_b[i] / amp2max, amp2log), sat);
+      } else {
+        let vol = loudness(render_args.fft.sqr_amp[i] / amp2max, amp2log);
+        let sat = render_args.showPhase ? 1 : 1 - amp;
+        let hue = render_args.showPhase ?
+          phase[f] / Math.PI * 0.5 + 0.5 :
+          getFreqHue(f);
+        [r, g, b] = hsv2rgb(hue, sat, vol);
       }
 
       image.data[offset + 0] = r * 255;
@@ -364,7 +368,7 @@ function updateCanvas() {
 
 function applyFn(a, fn) {
   for (let i = 0; i < a.length; i++)
-    a[i] = fn(a[i]);
+    a[i] = fn(a[i], i);
 }
 
 function getArrayMax(a) {
@@ -477,8 +481,8 @@ function playCurrentAudioSample() {
     playingAudioSource.stop();
     playingAudioSource = null;
   }
-  let tmpbuf = audioCtx.createBuffer(1, aviewport.len, abuffer.sampleRate);
-  abuffer.copyFromChannel(tmpbuf.getChannelData(0), 0, aviewport.min);
+  let tmpbuf = audioCtx.createBuffer(1, aviewport.tlen, abuffer.sampleRate);
+  abuffer.copyFromChannel(tmpbuf.getChannelData(0), 0, aviewport.tmin);
   let source = audioCtx.createBufferSource();
   source.buffer = tmpbuf;
   source.connect(audioCtx.destination);
@@ -498,7 +502,7 @@ function drawVerticalLine() {
   if (!audioCtx) return;
   vTimeBarAnimationId = requestAnimationFrame(drawVerticalLine);
   let at = audioCtx.currentTime - audioCtxStartTime;
-  let vd = aviewport.len / abuffer.sampleRate;
+  let vd = aviewport.tlen / abuffer.sampleRate;
   let dt = at / vd;
   vTimeBar.style.left = (100 * dt).toFixed(2) + '%';
   vTimeBar.style.visibility = dt < 0 || dt > 1 || !playingAudioSource ?
@@ -507,8 +511,8 @@ function drawVerticalLine() {
 }
 
 async function refreshViewport() {
-  aviewport.min = Math.max(0, aviewport.min | 0);
-  aviewport.len = Math.min(audio32.length - aviewport.min, aviewport.len | 0);
+  aviewport.tmin = Math.max(0, aviewport.tmin | 0);
+  aviewport.tlen = Math.min(audio32.length - aviewport.tmin, aviewport.tlen | 0);
   await renderFFT();
 }
 
@@ -534,8 +538,9 @@ async function prepareAudioBuffer(arrayBuffer) {
     abuffer.duration.toFixed(1), 'sec');
 
   audio32 = abuffer.getChannelData(0);
-  aviewport.min = 0;
-  aviewport.len = Math.min(audio32.length, 10 * SAMPLE_RATE);
+  assert(audio32 instanceof Float32Array);
+  aviewport.tmin = 0;
+  aviewport.tlen = Math.min(audio32.length, 10 * SAMPLE_RATE);
   await renderFFT();
 }
 
@@ -609,8 +614,8 @@ function defineShortcuts() {
   setShortcut('\u2190', {
     title: 'Move backwards',
     handler: () => {
-      let dx = aviewport.len / 2;
-      aviewport.min -= dx / 2;
+      let dx = aviewport.tlen / 2;
+      aviewport.tmin -= dx / 2;
       refreshViewport();
     },
   });
@@ -618,8 +623,8 @@ function defineShortcuts() {
   setShortcut('\u2192', {
     title: 'Move forward',
     handler: () => {
-      let dx = aviewport.len / 2;
-      aviewport.min += dx / 2;
+      let dx = aviewport.tlen / 2;
+      aviewport.tmin += dx / 2;
       refreshViewport();
     },
   });
@@ -627,9 +632,9 @@ function defineShortcuts() {
   setShortcut('\u2295', {
     title: 'Zoom in',
     handler: () => {
-      let dx = aviewport.len / 2;
-      aviewport.min += dx / 2;
-      aviewport.len *= 0.5;
+      let dx = aviewport.tlen / 2;
+      aviewport.tmin += dx / 2;
+      aviewport.tlen *= 0.5;
       refreshViewport();
     },
   });
@@ -637,9 +642,9 @@ function defineShortcuts() {
   setShortcut('\u2296', {
     title: 'Zoom out',
     handler: () => {
-      let dx = aviewport.len / 2;
-      aviewport.min -= dx;
-      aviewport.len *= 2;
+      let dx = aviewport.tlen / 2;
+      aviewport.tmin -= dx;
+      aviewport.tlen *= 2;
       refreshViewport();
     },
   });
@@ -762,12 +767,12 @@ canvasFFT.onmousemove = e => {
   if (!abuffer) return;
   let x = e.offsetX / canvasFFT.clientWidth;
   let y = e.offsetY / canvasFFT.clientHeight;
-  let dt = (x * aviewport.len + aviewport.min) / audio32.length * abuffer.duration;
+  let dt = (x * aviewport.tlen + aviewport.tmin) / audio32.length * abuffer.duration;
   let hz = mix(freqMin, freqMax, 1 - y) / FFT_SIZE * SAMPLE_RATE;
   let a2 = render_args.fft.sqr_amp[(x * NUM_FRAMES | 0) * NUM_FREQS + ((1 - y) * NUM_FREQS | 0)];
   eInfo.textContent = dt.toFixed(3) + 's '
     + hz.toFixed(0) + ' Hz '
-    + (a2 / render_args.amp2max * 100).toFixed(2) + '%';
+    + a2.toFixed(5);
 };
 
 canvasFFT.onclick = (e) => {
@@ -775,7 +780,7 @@ canvasFFT.onclick = (e) => {
 
   let x = e.offsetX / canvasFFT.clientWidth;
   let y = e.offsetY / canvasFFT.clientHeight;
-  let t = (x * aviewport.len + aviewport.min) | 0;
+  let t = (x * aviewport.tlen + aviewport.tmin) | 0;
 
   if (e.ctrlKey && e.shiftKey) {
     let df = 2 ** Math.ceil(Math.log2(1 - y));
@@ -784,11 +789,11 @@ canvasFFT.onclick = (e) => {
     freqMax = Math.ceil(freqMax);
     renderFFT();
   } else if (e.ctrlKey) {
-    aviewport.len -= t - aviewport.min;
-    aviewport.min = t;
+    aviewport.tlen -= t - aviewport.tmin;
+    aviewport.tmin = t;
     renderFFT();
   } else if (e.shiftKey) {
-    aviewport.len = t - aviewport.min;
+    aviewport.tlen = t - aviewport.tmin;
     renderFFT();
   }
 };

@@ -3,7 +3,7 @@ import { AudioController } from './audio/controller.js';
 import { CwtController } from './audio/cwt-controller.js';
 import * as log from './log.js';
 
-let btnDemo = document.querySelector('#demo');
+let btnPlay = document.querySelector('#play');
 let btnUpload = document.querySelector('#upload');
 let btnLogs = document.querySelector('#log');
 let btnMic = document.querySelector('#mic');
@@ -33,19 +33,14 @@ function main() {
   setMouseHandlers();
   setRecordingHandler();
   setLogsHandler();
-  setDemoButtonHandler();
+  setPlayButtonHandler();
   divStats.textContent = 'Select a file or use mic.';
 }
 
-function setDemoButtonHandler() {
-  let id = vargs.DEMO_ID;
-  let url = '/mp3/' + id + '.mp3';
-  btnDemo.style.display = id ? '' : 'none';
-  btnDemo.onclick = async () => {
+function setPlayButtonHandler() {
+  btnPlay.onclick = async () => {
     let controller = getAudioController();
-    await controller.stop();
-    await initAudioSource(url);
-    await controller.start(audioStream, null, audio);
+    controller.playAudio();
   };
 }
 
@@ -117,25 +112,6 @@ function setMouseHandlers() {
     await controller.start(audioStream);
   };
 
-  canvas.onclick = async e => {
-    if (e.which == 3) return; // right click
-
-    let x = e.offsetX / canvas.clientWidth - 0.5;
-    let y = 0.5 - e.offsetY / canvas.clientHeight;
-    log.i('canvas click:', x.toFixed(3), y.toFixed(3));
-
-    let controller = getAudioController();
-
-    // pause / resume already running audio
-    if (controller.started) {
-      if (controller.running)
-        controller.pause();
-      else
-        controller.resume();
-      return;
-    }
-  };
-
   btnUpload.onclick = async () => {
     let controller = getAudioController();
     await controller.stop();
@@ -174,7 +150,7 @@ function getAudioController() {
     AudioController;
 
   audioController = new ctor(canvas, {
-    fftSize: config.size * 2,
+    fftSize: config.size,
     stats: divStats,
   });
 

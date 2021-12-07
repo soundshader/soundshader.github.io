@@ -3,10 +3,11 @@ let args = new URLSearchParams(location.search);
 console.groupCollapsed('Config:');
 
 export const DEBUG = numarg('dbg', 0);
-export const SIZE = numarg('n', 2048); // Android
+export const SIZE = numarg('n', 2048); // 2048 is the max on Android
 export const SHADER = strarg('s', 'acf');
 export const SHADER_FPS = numarg('fps', 60);
-export const SAMPLE_RATE = numarg('sr', 44.1);
+export const SAMPLE_RATE = numarg('sr', 48);
+export const A4_FREQ = numarg('a4', 432);
 export const PLAYBACK_RATE = numarg('pbr', 1.0);
 export const IMAGE_SIZE = numarg('img', 1024);
 export const USE_MOUSE = numarg('mouse', 1);
@@ -14,6 +15,7 @@ export const PRELOAD = numarg('preload', 0);
 
 export const ACF_COLOR_SCHEME = numarg('acf.cs', 1);
 export const ACF_SMODE = strarg('acf.smode');
+export const ACF_LOUDNESS_RANGE =  strarg('acf.lr', 3.0);
 export const ACF_AGRAD = numarg('acf.agrad', 0);
 export const ACF_TGRAD = numarg('acf.tgrad', 0);
 export const ACF_R0 = numarg('acf.r0', 0.0);
@@ -22,7 +24,7 @@ export const ACF_EXP = numarg('acf.exp', 1.5);
 export const ACF_ABS_MAX = numarg('acf.absmax', 1.0);
 export const ACF_STATS = numarg('acf.stats', 0);
 export const ACF_ZOOM = numarg('acf.zoom', 5.0);
-export const ACF_MAX_SIZE = numarg('acf.max', 2048);
+export const ACF_MAX_SIZE = numarg('acf.max', 4096);
 export const ACF_COORDS = numarg('acf.coords', 0);
 export const ACF_SIGMA = numarg('acf.sig', 3.0);
 export const ACF_DECAY = numarg('acf.decay', 3.0);
@@ -43,7 +45,6 @@ export const FBO_MAX_SIZE = numarg('fbo.max', 27);
 export const SHOW_LOGS = numarg('log', 1);
 export const FLOAT_PRECISION = strarg('fp', 'highp');
 export const INT_PRECISION = strarg('ip', 'highp');
-export const DEMO_ID = numarg('demo', 330891);
 
 console.groupEnd();
 
@@ -51,7 +52,7 @@ function strarg(name, defval = '', regex = null) {
   let value = args.get(name);
   if (value === null)
     value = defval;
-  let info = 'URL arg ' + name + '=' + value;
+  let info = '?' + name + '=' + value;
   console.log(info);
   if (regex && !regex.test(value))
     throw new Error(info + ' doesnt match ' + regex);

@@ -5,9 +5,9 @@ export const vShaderCopy = `
   out vec2 v; // -1 .. +1
 
   void main () {
-      v = aPosition;
-      vTex = v * 0.5 + 0.5;
-      gl_Position = vec4(v, 0.0, 1.0);
+    v = aPosition;
+    vTex = v * 0.5 + 0.5;
+    gl_Position = vec4(v, 0.0, 1.0);
   }
 `;
 
@@ -70,6 +70,28 @@ export const shaderUtils = `
   // 0..1 -> 0..1
   float gain2(float x, float w) {
     return gain(x * 2.0 - 1.0, w) * 0.5 + 0.5;
+  }
+
+  float min3(float x, float y, float z) {
+    return min(min(x, y), z);
+  }
+
+  float sqr(float x) {
+    return x * x;
+  }
+
+  float log10(float x) {
+    const float log2_10 = log2(10.0);
+    return log2(x) / log2_10;
+  }
+
+  float hann(float x) {
+    float s = sin(${Math.PI} * x);
+    return x > 0.0 && x < 1.0 ? s * s : 0.0;
+  }
+
+  float hann_step(float x, float a, float b) {
+    return x < a ? 0.0 : x > b ? 1.0 : hann((x - a) / (b - a) * 0.5);
   }
 `;
 

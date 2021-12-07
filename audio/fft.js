@@ -192,7 +192,7 @@ export class FFT {
     return revidx;
   }
 
-  constructor(size, { webgl, layout } = {}) {
+  constructor(size, { webgl } = {}) {
     if (!Number.isFinite(size) || size < 2 || (size & (size - 1)))
       throw new Error('FFT: ' + size + ' != 2**k');
 
@@ -213,7 +213,6 @@ export class FFT {
     if (webgl) {
       this.shader = new GpuFFT(webgl, {
         size: this.size,
-        layout,
       });
     }
   }

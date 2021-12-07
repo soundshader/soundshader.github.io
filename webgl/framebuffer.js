@@ -84,6 +84,16 @@ export class GpuFrameBuffer {
   }
 
   upload(source) {
+    let nw = this.width;
+    let nh = this.height;
+    let ch = this.channels;
+
+    if (source.length != nw * nh * ch) {
+      let temp = new Float32Array(nw * nh * ch);
+      temp.set(source.subarray(0, temp.length));
+      source = temp;
+    }
+
     let gl = this.webgl.gl;
     let mipmap = 0;
     let border = 0;
@@ -96,8 +106,8 @@ export class GpuFrameBuffer {
       gl.TEXTURE_2D,
       mipmap,
       fmt.internalFormat,
-      this.width,
-      this.height,
+      nw,
+      nh,
       border,
       fmt.format,
       type,

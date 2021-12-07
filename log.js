@@ -5,6 +5,13 @@ export const i = (...args) => record('I', args);
 export const w = (...args) => record('W', args);
 export const e = (...args) => record('E', args);
 
+export function assert(x) {
+  if (!x) {
+    debugger;
+    throw new Error('assert: ' + x);
+  }
+}
+
 export function setUnhandledErrorHandler(handler) {
   window.addEventListener('error', (event, src, row, col, error) => {
     let err = event && event.error || error;
