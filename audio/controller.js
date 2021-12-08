@@ -121,15 +121,18 @@ export class AudioController {
     // N here has nothing to do with FFT size.
     this.waveform_fb = new GpuFrameBuffer(this.webgl,
       { size: 4096 });
+    let fb_size = this.waveform_fb.width * this.waveform_fb.height * this.waveform_fb.channels;
 
     log.i('Decoding audio data:', audioFile.type);
     let encodedAudio = await audioFile.arrayBuffer();
     this.audioBuffer = await this.audioCtx.decodeAudioData(encodedAudio);
     this.audioSamples = new Float32Array(this.audioBuffer.getChannelData(0))
-      .slice(0, this.waveform_fb.width * this.waveform_fb.height * this.waveform_fb.channels);
+
+    if (this.audioSamples.length > fb_size)
+      this.audioSamples = this.audioSamples.slice(0, fb_size);
+
     this.offsetMin = 0;
     this.offsetMax = this.audioSamples.length;
-
     this.waveform_fb.upload(this.audioSamples); // send to GPU
 
     log.i('Decoded sound:', this.fft_size, 'samples/batch',

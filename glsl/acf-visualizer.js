@@ -102,11 +102,19 @@ class GpuACF {
 
         const int F = ${num_frames};
         const int N = ${fft_size};
+        const int INT_MAX = 0x7FFFFFFF;
 
         void main() {
           ivec2 size = textureSize(uWaveFormFB, 0);
           ivec2 pos = ivec2(vTex * vec2(ivec2(F, N)) - 0.5);
-          int f = (uOffsetMin * (F - 1 - pos.x) + uOffsetMax * pos.x) / (F - 1) + pos.y;
+          int span = uOffsetMax - uOffsetMin; // up to size.x * size.y
+
+          // Make sure this doesn't overflow int32.
+          int diff = span < INT_MAX / pos.x ?
+            span * pos.x / (F - 1) :
+            span / (F - 1) * pos.x;
+            
+          int f = uOffsetMin + diff + pos.y;
           int i = f / size.x;
           int j = f % size.x;
           v_FragColor = f >= 0 && f < size.x * size.y ?
