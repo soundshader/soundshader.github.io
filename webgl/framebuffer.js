@@ -34,6 +34,13 @@ export class GpuFrameBuffer {
     this.clear();
   }
 
+  destroy() {
+    if (this.texture) {
+      this.webgl.gl.deleteTexture(this.texture);
+      this.webgl.checkError();
+    }
+  }
+
   // Moves data from GPU to CPU. Beware that doing this at 60 fps,
   // even if the texture is 1x1, kills the performance entirely.
   download(output = new Float32Array(this.width * this.height * this.channels),

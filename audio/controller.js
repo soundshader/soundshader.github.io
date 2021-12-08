@@ -93,11 +93,6 @@ export class AudioController {
 
     this.renderers.push(
       new ctor(this.webgl, args));
-
-    // The audio wave is packed in a NxNx1 buffer.
-    // N here has nothing to do with FFT size.
-    this.waveform_fb = new GpuFrameBuffer(this.webgl,
-      { size: 4096 });
   }
 
   switchCoords() {
@@ -119,8 +114,15 @@ export class AudioController {
     }, null);
   }
 
-  async start(audioStream, audioFile) {
-    log.i('Decoding audio data...');
+  async start(audioFile) {
+    stop(); // Just in case.
+
+    // The audio wave is packed in a NxNx1 buffer.
+    // N here has nothing to do with FFT size.
+    this.waveform_fb = new GpuFrameBuffer(this.webgl,
+      { size: 4096 });
+
+    log.i('Decoding audio data:', audioFile.type);
     let encodedAudio = await audioFile.arrayBuffer();
     this.audioBuffer = await this.audioCtx.decodeAudioData(encodedAudio);
     this.audioSamples = new Float32Array(this.audioBuffer.getChannelData(0))
@@ -128,7 +130,6 @@ export class AudioController {
     this.offsetMin = 0;
     this.offsetMax = this.audioSamples.length;
 
-    this.waveform_fb.clear();
     this.waveform_fb.upload(this.audioSamples); // send to GPU
 
     log.i('Decoded sound:', this.fft_size, 'samples/batch',
@@ -142,6 +143,11 @@ export class AudioController {
 
   stop() {
     this.stopAudio();
+
+    if (this.waveform_fb) {
+      this.waveform_fb.destroy();
+      this.waveform_fb = null;
+    }
   }
 
   async playAudio() {

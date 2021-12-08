@@ -11,7 +11,7 @@ let btnRec = document.querySelector('#rec');
 let divStats = document.querySelector('#stats');
 let canvas = document.querySelector('canvas');
 let audio = document.querySelector('audio');
-let audioStream = null;
+let micAudioStream = null;
 let audioController = null; // use getAudioController()
 let keyboardHandlers = {};
 
@@ -52,7 +52,7 @@ function setLogsHandler() {
 }
 
 function setRecordingHandler() {
-  let videoStream, recorder, chunks;
+  let imgVideoStream, recorder;
 
   if (!vargs.REC_FRAMERATE)
     btnRec.style.display = 'none';
@@ -60,63 +60,103 @@ function setRecordingHandler() {
   btnRec.onclick = async () => {
     if (recorder) {
       log.i('Saving recorded media');
-      videoStream.getTracks().map(t => t.stop());
-      videoStream = null;
+      imgVideoStream.getTracks().map(t => t.stop());
+      imgVideoStream = null;
 
-      recorder.onstop = () => {
-        let mime = recorder.mimeType;
-        let size = chunks.reduce((s, b) => s + b.size, 0);
-        log.i('Prepairing a media blob', mime, 'with',
-          chunks.length, 'chunks', size / 2 ** 10 | 0, 'KB total');
-        let blob = new Blob(chunks, { type: mime })
-        let url = URL.createObjectURL(blob);
-        chunks = [];
-        recorder = null;
+      let blob = await recorder.stop();
+      recorder = null;
 
-        log.i('Downloading the media blob at', url);
-        let a = document.createElement('a');
-        let filename = new Date().toJSON()
-          .replace(/\..+$/, '')
-          .replace(/[^\d]/g, '-');
-        a.download = filename;
-        a.href = url;
-        a.click();
-      };
-
-      recorder.stop();
+      let url = URL.createObjectURL(blob);
+      let a = document.createElement('a');
+      let filename = new Date().toJSON()
+        .replace(/\..+$/, '')
+        .replace(/[^\d]/g, '-');
+      a.download = filename;
+      a.href = url;
+      a.click();
     } else {
-      log.i('Prepairing video and audio streams for recording');
-      let stream = new MediaStream();
-      videoStream = canvas.captureStream(vargs.REC_FRAMERATE);
-      videoStream.getTracks().map(t => stream.addTrack(t));
-      audioStream.getTracks().map(t => stream.addTrack(t));
-
-      log.i('Starting recording a stream with',
-        stream.getTracks().length, 'media tracks');
-      recorder = new MediaRecorder(stream);
-      chunks = [];
-      recorder.ondataavailable =
-        (e) => void chunks.push(e.data);
-      recorder.start();
+      log.i('Starting image recording');
+      imgVideoStream = canvas.captureStream(vargs.REC_FRAMERATE);
+      recorder = new MediaFileRecorder(micAudioStream, imgVideoStream);
+      recorder.startRecording();
     }
   };
 }
 
+class MediaFileRecorder {
+  constructor(audioStream, videoStream = null) {
+    this.recorder = null;
+    this.chunks = null;
+    this.audioStream = audioStream;
+    this.videoStream = videoStream;
+  }
+
+  async saveRecording() {
+    let recorder = this.recorder;
+    let chunks = this.chunks;
+
+    await new Promise(resolve => {
+      recorder.onstop = () => resolve();
+      recorder.stop();
+    });
+
+    let mime = recorder.mimeType;
+    let size = chunks.reduce((s, b) => s + b.size, 0);
+    log.i('Prepairing a media blob', mime, 'with',
+      chunks.length, 'chunks', size / 2 ** 10 | 0, 'KB total');
+    let blob = new Blob(chunks, { type: mime })
+    this.chunks = [];
+    this.recorder = null;
+    return blob;
+  }
+
+  startRecording() {
+    let audioStream = this.audioStream;
+    let videoStream = this.videoStream;
+    let stream = new MediaStream();
+
+    videoStream && videoStream.getTracks()
+      .map(t => stream.addTrack(t));
+    audioStream && audioStream.getTracks()
+      .map(t => stream.addTrack(t));
+
+    this.recorder = new MediaRecorder(stream);
+    this.chunks = [];
+    this.recorder.ondataavailable =
+      (e) => void this.chunks.push(e.data);
+    this.recorder.start();
+  }
+}
+
 function setMouseHandlers() {
+  let recorder;
+
   btnMic.onclick = async () => {
-    let controller = getAudioController();
-    await controller.stop();
-    audioStream = await navigator.mediaDevices.getUserMedia(
-      { audio: config.audio });
-    log.i('Captured microphone stream.');
-    await controller.start(audioStream);
+    if (recorder) {
+      btnMic.textContent = 'mic';
+      let blob = await recorder.saveRecording();
+      micAudioStream.getTracks().forEach(t => t.stop());
+      recorder = null;
+      let controller = getAudioController();
+      await controller.start(blob);
+    } else {
+      micAudioStream = await navigator.mediaDevices.getUserMedia(
+        { audio: config.audio });
+      if (micAudioStream) {
+        recorder = new MediaFileRecorder(micAudioStream);
+        recorder.startRecording();
+        btnMic.textContent = 'rec';
+        divStats.textContent = 'Recording mic...';
+      } else {
+        log.e('getUserMedia failed. No mic?');
+      }
+    }
   };
 
   btnUpload.onclick = async () => {
     let controller = getAudioController();
-    await controller.stop();
     let file = await selectAudioFile();
-    file && await controller.start(audioStream, file, audio);
+    file && await controller.start(file);
   };
 }
 
@@ -196,9 +236,9 @@ async function initAudioSource(url) {
   });
 
   log.i('Capturing audio stream');
-  audioStream = audio.captureStream ?
+  micAudioStream = audio.captureStream ?
     audio.captureStream() :
     audio.mozCaptureStream();
 
-  log.i('Audio stream id:', audioStream.id);
+  log.i('Audio stream id:', micAudioStream.id);
 }

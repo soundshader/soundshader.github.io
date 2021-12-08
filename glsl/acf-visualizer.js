@@ -109,7 +109,7 @@ class GpuACF {
           int f = (uOffsetMin * (F - 1 - pos.x) + uOffsetMax * pos.x) / (F - 1) + pos.y;
           int i = f / size.x;
           int j = f % size.x;
-          v_FragColor = j >= 0 && i >= 0 && j < size.x && i < size.y ?
+          v_FragColor = f >= 0 && f < size.x * size.y ?
             texelFetch(uWaveFormFB, ivec2(j, i), 0) :
             vec4(0.0);
         }
