@@ -9,6 +9,8 @@ Interpreting ACF images:
 1. Color means note, e.g. A4=432Hz is red, but so is A1, A2 and all other A notes. B is orange, C is yellow, D is green and so on.
 1. The amount of fine details is frequency: the higher the frequency, the more fine details you see. If notes of different colors and different frequencies sound simultaneously, e.g. a A2 with a G5, you'll see a red belt with a few repetitions mixed with a blue belt with 8x more repetitions, so the result will be a purple belt with a fine structure.
 
+For example, on one image below there is a green belt with 10 repetitions. One repetition correponds to 13.5 Hz here (55296 Hz sample rate, 4096 FFT bins), so 10 repetitions is 135 Hz, which corresponds to C3. On another image there is a curious red cross in the center, it's a red belt with 2 repetitons. That's 27 Hz, or A0, almost infrasound.
+
 Demo: [https://soundshader.github.io/?n=4096&img=2048&acf.lr=5&sr=55.296](https://soundshader.github.io/?n=4096&img=2048&acf.lr=5&sr=55.296). With `C` on keyboard you can switch between polar and decart coords, and with Ctrl+Click and Shift+Click you can select the left and right boundary of the sound sample.
 
 GitHub: https://github.com/soundshader/soundshader.github.io
