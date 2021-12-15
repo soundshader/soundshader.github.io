@@ -1,5 +1,5 @@
 import * as log from '../log.js';
-import { FFT, GpuFFT, AutoCF } from '../audio/fft.js';
+import { FFT, AutoCF } from '../audio/fft.js';
 import { GpuContext } from '../webgl/gpu-context.js';
 
 const ARGS = new URLSearchParams(location.search);

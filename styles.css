@@ -15,17 +15,21 @@ canvas {
 
 @media screen and (orientation:portrait) {
   canvas {
+    /* center vertically */
     width: 100%;
-    top: 50vh;
-    transform: translateY(-50%);
+    margin-top: calc(50vh - 50vw);
   }
 }
 
 @media screen and (orientation:landscape) {
   canvas {
+    /* center horizontally */
     height: 100%;
-    left: 50vw;
-    transform: translateX(-50%);
+    margin-left: calc(50vw - 50vh);
+  }
+
+  #vtimebar:not(.polar) {
+    margin-left: calc(50vw - 50vh);
   }
 }
 
@@ -70,4 +74,24 @@ button {
   outline: 1px solid #444;
   background: #080;
   opacity: 0.2;
+}
+
+#vtimebar {
+  position: fixed;
+  visibility: hidden;
+}
+
+#vtimebar:not(.polar) {
+  width: 1px;
+  height: 100%;
+  top: 0;
+  background: #0f0;
+}
+
+#vtimebar.polar {
+  left: 50vw;
+  top: 50vh;
+  transform: translateX(-50%) translateY(-50%);
+  border: 1px solid #0f0;
+  border-radius: 50%;
 }

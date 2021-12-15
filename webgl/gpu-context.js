@@ -53,8 +53,8 @@ export class GpuContext {
       preserveDrawingBuffer: false,
     };
 
-    log.i('Initializing WebGL', params);
-    log.i('Debug mode:', vargs.DEBUG);
+    log.i('Initializing WebGL');
+    log.v(params);
 
     let gl = canvas.getContext('webgl2', params);
     if (!gl) throw new Error('WebGL 2.0 not available');

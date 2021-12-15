@@ -10,7 +10,7 @@ export class CwtController {
 
   init() {
     this.audioCtx = new AudioContext({
-      sampleRate: vargs.SAMPLE_RATE * 1e3 | 0,
+      sampleRate: vargs.SAMPLE_RATE | 0,
     });
 
     this.cwt = new CWT(this.fftHalfSize, {

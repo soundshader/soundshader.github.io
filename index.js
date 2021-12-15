@@ -3,23 +3,27 @@ import { AudioController } from './audio/controller.js';
 import { CwtController } from './audio/cwt-controller.js';
 import * as log from './log.js';
 
-let btnPlay = document.querySelector('#play');
-let btnUpload = document.querySelector('#upload');
-let btnLogs = document.querySelector('#log');
-let btnMic = document.querySelector('#mic');
-let btnRec = document.querySelector('#rec');
-let divStats = document.querySelector('#stats');
-let canvas = document.querySelector('canvas');
-let audio = document.querySelector('audio');
+let $ = x => document.querySelector(x);
+
+let btnPlay = $('#play');
+let btnUpload = $('#upload');
+let btnLogs = $('#log');
+let btnMic = $('#mic');
+let btnRec = $('#rec');
+let divStats = $('#stats');
+let vTimeBar = $('#vtimebar');
+let canvas = $('canvas');
+let audio = $('audio');
 let micAudioStream = null;
 let audioController = null; // use getAudioController()
 let keyboardHandlers = {};
+let vTimeBarAnimationId = 0;
 
 let config = {
-  size: vargs.SIZE,
+  size: vargs.FFT_SIZE,
   audio: {
     channelCount: 1,
-    sampleRate: vargs.SAMPLE_RATE * 1e3 | 0,
+    sampleRate: vargs.SAMPLE_RATE | 0,
   },
 };
 
@@ -28,7 +32,10 @@ window.onload = () => void main();
 function main() {
   canvas.width = vargs.IMAGE_SIZE;
   canvas.height = vargs.IMAGE_SIZE;
-  log.i('canvas size:', vargs.IMAGE_SIZE);
+  log.i('Image size:', vargs.IMAGE_SIZE);
+  log.i('Sample rate:', vargs.SAMPLE_RATE, 'Hz');
+  log.i('A4 note:', vargs.A4_FREQ, 'Hz');
+  log.i('FFT size:', vargs.FFT_SIZE);
   setKeyboardHandlers();
   setMouseHandlers();
   setRecordingHandler();
@@ -41,6 +48,7 @@ function setPlayButtonHandler() {
   btnPlay.onclick = async () => {
     let controller = getAudioController();
     controller.playAudio();
+    startUpdatingTimeBar();
   };
 }
 
@@ -63,7 +71,7 @@ function setRecordingHandler() {
       imgVideoStream.getTracks().map(t => t.stop());
       imgVideoStream = null;
 
-      let blob = await recorder.stop();
+      let blob = await recorder.saveRecording();
       recorder = null;
 
       let url = URL.createObjectURL(blob);
@@ -71,7 +79,7 @@ function setRecordingHandler() {
       let filename = new Date().toJSON()
         .replace(/\..+$/, '')
         .replace(/[^\d]/g, '-');
-      a.download = filename;
+      a.download = filename + '.webm';
       a.href = url;
       a.click();
     } else {
@@ -120,7 +128,8 @@ class MediaFileRecorder {
     audioStream && audioStream.getTracks()
       .map(t => stream.addTrack(t));
 
-    this.recorder = new MediaRecorder(stream);
+    this.recorder = new MediaRecorder(stream,
+      { mimeType: 'video/webm' });
     this.chunks = [];
     this.recorder.ondataavailable =
       (e) => void this.chunks.push(e.data);
@@ -167,8 +176,10 @@ function setKeyboardHandlers() {
     if (handler) handler(e);
   };
 
-  setKeyboardHandler('c', 'Switch coords.',
+  setKeyboardHandler('c', 'Switch coords',
     () => getAudioController().switchCoords());
+  setKeyboardHandler('f', 'Switch FFT vs ACF',
+    () => getAudioController().switchRenderer());
 }
 
 function setKeyboardHandler(key, description, handler) {
@@ -199,7 +210,7 @@ function getAudioController() {
 }
 
 async function selectAudioFile() {
-  log.i('Creating an <input> to pick a file');
+  log.v('Creating an <input> to pick a file');
   let input = document.createElement('input');
   input.type = 'file';
   input.accept = 'audio/mpeg; audio/wav; audio/webm';
@@ -223,7 +234,7 @@ async function selectAudioFile() {
 }
 
 async function initAudioSource(url) {
-  log.i('Decoding audio file:', url);
+  log.v('Decoding audio file:', url);
 
   audio.src = url;
   audio.playbackRate = vargs.PLAYBACK_RATE;
@@ -235,10 +246,40 @@ async function initAudioSource(url) {
       () => reject(audio.error);
   });
 
-  log.i('Capturing audio stream');
+  log.v('Capturing audio stream');
   micAudioStream = audio.captureStream ?
     audio.captureStream() :
     audio.mozCaptureStream();
 
-  log.i('Audio stream id:', micAudioStream.id);
+  log.v('Audio stream id:', micAudioStream.id);
+}
+
+function startUpdatingTimeBar() {
+  cancelAnimationFrame(vTimeBarAnimationId);
+  vTimeBarAnimationId = 0;
+  let timestamp = audioController.currentTime;
+  let duration = audioController.audioDuration;
+
+  if (!duration) {
+    vTimeBar.style.visibility = 'hidden';
+    return;
+  }
+
+  let dt = timestamp / duration; // 0..1
+  let px = (dt * canvas.clientWidth).toFixed(2) + 'px';
+
+  if (audioController.polarCoords) {
+    vTimeBar.style.width = px;
+    vTimeBar.style.height = px;
+    vTimeBar.style.left = '';
+    vTimeBar.classList.toggle('polar', true);
+  } else {
+    vTimeBar.style.width = '';
+    vTimeBar.style.height = '';
+    vTimeBar.style.left = px;
+    vTimeBar.classList.toggle('polar', false);
+  }
+
+  vTimeBar.style.visibility = 'visible';
+  vTimeBarAnimationId = requestAnimationFrame(startUpdatingTimeBar);
 }

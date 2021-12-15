@@ -133,7 +133,7 @@ export class GpuFrameBuffer {
     let note = `${spec} = ${count >> 20}M x float`;
     let tmax = gl.getParameter(gl.MAX_TEXTURE_SIZE);
 
-    log.i(`GPU buffer: ${note}`);
+    log.v(`GPU buffer: ${note}`);
 
     if (count > 2 ** vargs.FBO_MAX_SIZE || Math.max(width, height) > tmax)
       throw new Error(`Texture too large: ${note}`);

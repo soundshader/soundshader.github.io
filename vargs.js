@@ -3,19 +3,19 @@ let args = new URLSearchParams(location.search);
 console.groupCollapsed('Config:');
 
 export const DEBUG = numarg('dbg', 0);
-export const SIZE = numarg('n', 2048); // 2048 is the max on Android
+export const FFT_SIZE = numarg('n', 4096); // 2048 is the max on Android
 export const SHADER = strarg('s', 'acf');
 export const SHADER_FPS = numarg('fps', 60);
-export const SAMPLE_RATE = numarg('sr', 48);
 export const A4_FREQ = numarg('a4', 432);
+export const SAMPLE_RATE = strarg('sr', 'A11', /^A?\d+$/,
+  s => +s || 2 ** (s.slice(1) - 4) * A4_FREQ);
 export const PLAYBACK_RATE = numarg('pbr', 1.0);
-export const IMAGE_SIZE = numarg('img', 1024);
+export const IMAGE_SIZE = numarg('img', 2048);
 export const USE_MOUSE = numarg('mouse', 1);
-export const PRELOAD = numarg('preload', 0);
 
 export const ACF_COLOR_SCHEME = numarg('acf.cs', 1);
 export const ACF_SMODE = strarg('acf.smode');
-export const ACF_LOUDNESS_RANGE =  strarg('acf.lr', 3.0);
+export const ACF_LOUDNESS_RANGE = strarg('acf.lr', 2.5);
 export const ACF_AGRAD = numarg('acf.agrad', 0);
 export const ACF_TGRAD = numarg('acf.tgrad', 0);
 export const ACF_R0 = numarg('acf.r0', 0.0);
@@ -48,7 +48,7 @@ export const INT_PRECISION = strarg('ip', 'highp');
 
 console.groupEnd();
 
-function strarg(name, defval = '', regex = null) {
+function strarg(name, defval = '', regex = null, parser_fn = null) {
   let value = args.get(name);
   if (value === null)
     value = defval;
@@ -56,6 +56,8 @@ function strarg(name, defval = '', regex = null) {
   console.log(info);
   if (regex && !regex.test(value))
     throw new Error(info + ' doesnt match ' + regex);
+  if (parser_fn)
+    value = parser_fn(value);
   return value;
 }
 
