@@ -12,6 +12,9 @@ export const SAMPLE_RATE = strarg('sr', 'A11', /^A?\d+$/,
 export const PLAYBACK_RATE = numarg('pbr', 1.0);
 export const IMAGE_SIZE = numarg('img', 2048);
 export const USE_MOUSE = numarg('mouse', 1);
+export const HANN_WINDOW = numarg('hann', 1);
+export const VOL_FACTOR = numarg('vol', 1);
+export const SHOW_MIC = numarg('mic', 0);
 
 export const ACF_COLOR_SCHEME = numarg('acf.cs', 1);
 export const ACF_SMODE = strarg('acf.smode');
@@ -31,6 +34,10 @@ export const ACF_DECAY = numarg('acf.decay', 3.0);
 export const ACF_A_WEIGHT = numarg('acf.aweight', 0.0);
 export const ACF_RGB_1 = strarg('acf.c1', '4,2,1');
 export const ACF_RGB_2 = strarg('acf.c2', '1,2,4');
+export const ACF_RGB = numarg('acf.rgb', 1);
+export const ACF_DYN_LOUDNESS = numarg('acf.dyn', 1);
+export const ACF_LOUDNESS_DECAY = numarg('acf.dec', 0.999);
+export const ACF_MUTE_RANGE = numarg('acf.mr', 1);
 
 export const REC_FRAMERATE = numarg('rec.fps', 0);
 export const CWT_BRIGHTNESS = numarg('cwt.b', 1);
@@ -42,7 +49,7 @@ export const FFT_TIME = numarg('fft.time', 0);
 export const FFT_LOG_SCALE = numarg('fft.log', 1);
 export const USE_ALPHA_CHANNEL = numarg('alpha', 0);
 export const FBO_MAX_SIZE = numarg('fbo.max', 27);
-export const SHOW_LOGS = numarg('log', 1);
+export const SHOW_LOGS = numarg('log', 0);
 export const FLOAT_PRECISION = strarg('fp', 'highp');
 export const INT_PRECISION = strarg('ip', 'highp');
 

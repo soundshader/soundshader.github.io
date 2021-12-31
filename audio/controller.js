@@ -7,6 +7,10 @@ import { GpuAcfVisualizerProgram } from '../glsl/acf-visualizer.js';
 // Uses WebAudio's getFloatTimeDomainData() to read the raw audio samples
 // and then applies FFT to compute amplitudes and phases (important!).
 export class AudioController {
+  get audioStream() {
+    return this.destNode.stream;
+  }
+
   // seconds
   get currentTime() {
     return !this.activeAudio ? null :
@@ -122,10 +126,10 @@ export class AudioController {
 
   drawFrame(input = this.waveform_fb) {
     let node = this.renderers[this.rendererId];
-    let t_min = this.offsetMin - this.fft_size;
-    let t_max = this.offsetMax;
+    let t_min = this.offsetMin - this.fft_size/2;
+    let t_max = this.offsetMax - this.fft_size/2;
 
-    log.i('FFT step:', (t_max - t_min) / this.canvas.width | 0);
+    log.v('FFT step:', (t_max - t_min) / this.canvas.width | 0);
 
     node.exec({
       uWaveFormFB: input,
@@ -145,6 +149,7 @@ export class AudioController {
 
     let encodedAudio = await audioFile.arrayBuffer();
     this.audioCtx = this.createAudioContext();
+    this.destNode = this.audioCtx.createMediaStreamDestination();
     log.i('Decoding audio data:', audioFile.type);
     let ts = Date.now();
     this.audioBuffer = await this.audioCtx.decodeAudioData(encodedAudio);
@@ -154,6 +159,8 @@ export class AudioController {
 
     if (this.audioSamples.length > fb_size)
       this.audioSamples = this.audioSamples.slice(0, fb_size);
+
+    // TODO: Add N/2 zeros on the left and on the right.
 
     this.offsetMin = 0;
     this.offsetMax = this.audioSamples.length;
@@ -190,6 +197,7 @@ export class AudioController {
     let source = audioCtx.createBufferSource();
     source.buffer = tmpbuf;
     source.connect(audioCtx.destination);
+    source.connect(this.destNode);
     this.activeAudio = source;
     this.playbackStarted = audioCtx.currentTime;
     log.i('Playing audio sample', tmpbuf.duration.toFixed(1), 'sec');

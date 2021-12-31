@@ -16,20 +16,21 @@ canvas {
 @media screen and (orientation:portrait) {
   canvas {
     /* center vertically */
-    width: 100%;
     margin-top: calc(50vh - 50vw);
+    width: 100%;
   }
 }
 
 @media screen and (orientation:landscape) {
   canvas {
-    /* center horizontally */
+    width: 100%;
     height: 100%;
-    margin-left: calc(50vw - 50vh);
   }
 
-  #vtimebar:not(.polar) {
+  body.polar canvas {
+    /* center horizontally */
     margin-left: calc(50vw - 50vh);
+    width: 100vh;
   }
 }
 
@@ -81,14 +82,14 @@ button {
   visibility: hidden;
 }
 
-#vtimebar:not(.polar) {
+body:not(.polar) #vtimebar {
   width: 1px;
   height: 100%;
   top: 0;
   background: #0f0;
 }
 
-#vtimebar.polar {
+body.polar #vtimebar {
   left: 50vw;
   top: 50vh;
   transform: translateX(-50%) translateY(-50%);

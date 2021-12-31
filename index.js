@@ -1,6 +1,6 @@
 import * as vargs from './vargs.js';
 import { AudioController } from './audio/controller.js';
-import { CwtController } from './audio/cwt-controller.js';
+import { MediaFileRecorder } from './audio/recorder.js';
 import * as log from './log.js';
 
 let $ = x => document.querySelector(x);
@@ -13,8 +13,7 @@ let btnRec = $('#rec');
 let divStats = $('#stats');
 let vTimeBar = $('#vtimebar');
 let canvas = $('canvas');
-let audio = $('audio');
-let micAudioStream = null;
+let vAudio = $('audio');
 let audioController = null; // use getAudioController()
 let keyboardHandlers = {};
 let vTimeBarAnimationId = 0;
@@ -60,7 +59,7 @@ function setLogsHandler() {
 }
 
 function setRecordingHandler() {
-  let imgVideoStream, recorder;
+  let videoStream, audioStream, recorder;
 
   if (!vargs.REC_FRAMERATE)
     btnRec.style.display = 'none';
@@ -68,12 +67,10 @@ function setRecordingHandler() {
   btnRec.onclick = async () => {
     if (recorder) {
       log.i('Saving recorded media');
-      imgVideoStream.getTracks().map(t => t.stop());
-      imgVideoStream = null;
+      videoStream.getTracks().map(t => t.stop());
+      videoStream = null;
 
       let blob = await recorder.saveRecording();
-      recorder = null;
-
       let url = URL.createObjectURL(blob);
       let a = document.createElement('a');
       let filename = new Date().toJSON()
@@ -82,63 +79,21 @@ function setRecordingHandler() {
       a.download = filename + '.webm';
       a.href = url;
       a.click();
+      recorder = null;
     } else {
-      log.i('Starting image recording');
-      imgVideoStream = canvas.captureStream(vargs.REC_FRAMERATE);
-      recorder = new MediaFileRecorder(micAudioStream, imgVideoStream);
+      videoStream = canvas.captureStream(vargs.REC_FRAMERATE);
+      audioStream = getAudioController().audioStream;
+      recorder = new MediaFileRecorder(audioStream, videoStream);
       recorder.startRecording();
     }
   };
 }
 
-class MediaFileRecorder {
-  constructor(audioStream, videoStream = null) {
-    this.recorder = null;
-    this.chunks = null;
-    this.audioStream = audioStream;
-    this.videoStream = videoStream;
-  }
-
-  async saveRecording() {
-    let recorder = this.recorder;
-    let chunks = this.chunks;
-
-    await new Promise(resolve => {
-      recorder.onstop = () => resolve();
-      recorder.stop();
-    });
-
-    let mime = recorder.mimeType;
-    let size = chunks.reduce((s, b) => s + b.size, 0);
-    log.i('Prepairing a media blob', mime, 'with',
-      chunks.length, 'chunks', size / 2 ** 10 | 0, 'KB total');
-    let blob = new Blob(chunks, { type: mime })
-    this.chunks = [];
-    this.recorder = null;
-    return blob;
-  }
-
-  startRecording() {
-    let audioStream = this.audioStream;
-    let videoStream = this.videoStream;
-    let stream = new MediaStream();
-
-    videoStream && videoStream.getTracks()
-      .map(t => stream.addTrack(t));
-    audioStream && audioStream.getTracks()
-      .map(t => stream.addTrack(t));
-
-    this.recorder = new MediaRecorder(stream,
-      { mimeType: 'video/webm' });
-    this.chunks = [];
-    this.recorder.ondataavailable =
-      (e) => void this.chunks.push(e.data);
-    this.recorder.start();
-  }
-}
-
 function setMouseHandlers() {
-  let recorder;
+  let recorder, micAudioStream;
+
+  if (!vargs.SHOW_MIC)
+    btnMic.style.display = 'none';
 
   btnMic.onclick = async () => {
     if (recorder) {
@@ -176,8 +131,12 @@ function setKeyboardHandlers() {
     if (handler) handler(e);
   };
 
-  setKeyboardHandler('c', 'Switch coords',
-    () => getAudioController().switchCoords());
+  setKeyboardHandler('c', 'Switch coords', () => {
+    let ctrl = getAudioController();
+    ctrl.switchCoords();
+    document.body.classList.toggle('polar', ctrl.polarCoords);
+  });
+
   setKeyboardHandler('f', 'Switch FFT vs ACF',
     () => getAudioController().switchRenderer());
 }
@@ -196,16 +155,14 @@ function getAudioController() {
   if (audioController)
     return audioController;
 
-  let ctor = vargs.SHADER == 'cwt' ?
-    CwtController :
-    AudioController;
-
-  audioController = new ctor(canvas, {
+  audioController = new AudioController(canvas, {
     fftSize: config.size,
     stats: divStats,
   });
 
   audioController.init();
+  document.body.classList.toggle('polar',
+    audioController.polarCoords);
   return audioController;
 }
 
@@ -223,35 +180,7 @@ async function selectAudioFile() {
     };
   });
 
-  if (!file) return;
-
-  log.i('Selected file:', file.type,
-    file.size / 2 ** 10 | 0, 'KB', file.name);
-  document.title = file.name;
-  let url = URL.createObjectURL(file);
-  await initAudioSource(url);
   return file;
-}
-
-async function initAudioSource(url) {
-  log.v('Decoding audio file:', url);
-
-  audio.src = url;
-  audio.playbackRate = vargs.PLAYBACK_RATE;
-
-  await new Promise((resolve, reject) => {
-    audio.onloadeddata =
-      () => resolve();
-    audio.onerror =
-      () => reject(audio.error);
-  });
-
-  log.v('Capturing audio stream');
-  micAudioStream = audio.captureStream ?
-    audio.captureStream() :
-    audio.mozCaptureStream();
-
-  log.v('Audio stream id:', micAudioStream.id);
 }
 
 function startUpdatingTimeBar() {
@@ -265,19 +194,18 @@ function startUpdatingTimeBar() {
     return;
   }
 
-  let dt = timestamp / duration; // 0..1
-  let px = (dt * canvas.clientWidth).toFixed(2) + 'px';
-
   if (audioController.polarCoords) {
+    let dt = 1 - timestamp / duration; // 0..1
+    let px = (dt * canvas.clientWidth).toFixed(2) + 'px';
     vTimeBar.style.width = px;
     vTimeBar.style.height = px;
     vTimeBar.style.left = '';
-    vTimeBar.classList.toggle('polar', true);
   } else {
+    let dt = timestamp / duration; // 0..1
+    let px = (dt * canvas.clientWidth).toFixed(2) + 'px';
     vTimeBar.style.width = '';
     vTimeBar.style.height = '';
     vTimeBar.style.left = px;
-    vTimeBar.classList.toggle('polar', false);
   }
 
   vTimeBar.style.visibility = 'visible';

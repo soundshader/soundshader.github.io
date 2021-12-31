@@ -20,7 +20,7 @@ export class GpuAcfVisualizerProgram {
 
     this.gpuACF = new GpuACF(webgl, { fft_size, num_frames: size });
     this.heightMap = new GpuHeightMapProgram(webgl, { size, channels: 4 });
-    this.smooth_max = new GpuSmoothMax(webgl, { size, factor: 0.999 });
+    this.smooth_max = new GpuSmoothMax(webgl, { size, factor: vargs.ACF_LOUDNESS_DECAY });
     this.downsampler1 = new GpuDownsampler(webgl, { width: size, height: size, aa, channels: 4 });
     this.downsampler2 = new GpuDownsampler(webgl,
       { width: 1, height: fft_size, aa: Math.log2(fft_size / size), channels: 4 });
@@ -212,7 +212,7 @@ class GpuACF {
           float f = vTex.y * N - 0.5;
           float freq_hz = SR * min(f, N - f) / N;
           float pitch = fract(log2(freq_hz / A0));
-          float val = hann_step(freq_hz / A0, 0.0, 1.0);
+          float val = hann_step(freq_hz / A0, 0.0, float(${vargs.ACF_MUTE_RANGE}));
           vec3 rgb = hann_hsv2rgb(vec3(pitch, 1.0, val));
 
           v_FragColor = texture(uFFT, vTex).x * vec4(rgb, 0.0);
@@ -228,26 +228,36 @@ class GpuACF {
       throw new Error('ACF input must be a NxNx1 buffer');
 
     this.frame_selector.exec({ uWaveFormFB, uOffsetMin, uOffsetMax }, this.temp1a);
-    this.hann_window.exec({ uWave: this.temp1a }, this.temp2a);
-    this.fft.exec({ uInput: this.temp2a }, this.temp2b);
+    if (vargs.HANN_WINDOW)
+      this.hann_window.exec({ uWave: this.temp1a }, this.temp2a);
+    this.fft.exec({ uInput: vargs.HANN_WINDOW ? this.temp2a : this.temp1a }, this.temp2b);
     this.sqr_abs.exec({ uInput: this.temp2b }, this.temp2a);
 
-    this.rgb_mask.exec({ uFFT: this.temp2a }, this.fft_rgb);
-    this.dot_prod.exec({ uInput: this.fft_rgb, uProd: [1, 0, 0, 0] }, this.fft_r);
-    this.dot_prod.exec({ uInput: this.fft_rgb, uProd: [0, 1, 0, 0] }, this.fft_g);
-    this.dot_prod.exec({ uInput: this.fft_rgb, uProd: [0, 0, 1, 0] }, this.fft_b);
+    if (vargs.ACF_RGB) {
+      this.rgb_mask.exec({ uFFT: this.temp2a }, this.fft_rgb);
+      this.dot_prod.exec({ uInput: this.fft_rgb, uProd: [1, 0, 0, 0] }, this.fft_r);
+      this.dot_prod.exec({ uInput: this.fft_rgb, uProd: [0, 1, 0, 0] }, this.fft_g);
+      this.dot_prod.exec({ uInput: this.fft_rgb, uProd: [0, 0, 1, 0] }, this.fft_b);
+    }
 
     // In general, ACF[X] needs to do inverseFFT[S]
     // here, but since S is real and ACF[X] is also
     // real, inverseFFT here is equivalent to FFT.
     if (this.show_acf) {
       this.fft.exec({ uInput: this.temp2a }, this.temp2a);
-      this.fft.exec({ uInput: this.fft_r }, this.fft_r);
-      this.fft.exec({ uInput: this.fft_g }, this.fft_g);
-      this.fft.exec({ uInput: this.fft_b }, this.fft_b);
+      if (vargs.ACF_RGB) {
+        this.fft.exec({ uInput: this.fft_r }, this.fft_r);
+        this.fft.exec({ uInput: this.fft_g }, this.fft_g);
+        this.fft.exec({ uInput: this.fft_b }, this.fft_b);
+      }
     }
 
-    this.merge_rgb.exec({ uA: this.temp2a, uR: this.fft_r, uG: this.fft_g, uB: this.fft_b }, uACF);
+    this.merge_rgb.exec({
+      uA: this.temp2a,
+      uR: this.fft_r,
+      uG: this.fft_g,
+      uB: this.fft_b
+    }, uACF);
   }
 }
 
@@ -272,7 +282,8 @@ class GpuHeightMapProgram extends GpuTransformProgram {
         ${textureUtils}
 
         vec4 h_acf(vec2 ta) {
-          float s_max = texture(uSmoothMax, vec2(ta.x, 0.0)).x;
+          float t_max = mix(1.0 - 0.5/N, ta.x, float(${vargs.ACF_DYN_LOUDNESS}));
+          float s_max = texture(uSmoothMax, vec2(t_max, 0.0)).x;
           if (s_max <= 0.0) return vec4(0.0);
           return textureSmooth(uACF, ta) / s_max;
         }
@@ -280,7 +291,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
         vec4 fetch_disk() {
           float r = abs(length(v) - R0);
           if (r > 0.99) return vec4(0.0);
-          float t = r;
+          float t = 1.0 - r;
           float arg = atan2(v.y, v.x);
           float a = -0.25 + 0.5 * arg / PI;
           return h_acf(vec2(t, a));
@@ -336,14 +347,16 @@ class GpuColorizer extends GpuTransformProgram {
         vec3 h_rgb() {
           vec4 h = h_acf();
           float sat = 1.0 - h.x * h.x;
-          vec3 c = abs(h.yzw);
+          vec3 c = ${!!vargs.ACF_RGB} ? abs(h.yzw) :
+            abs(h.x) * vec3(1.0, 2.0, 4.0);
+          c *= float(${vargs.VOL_FACTOR});
           c.r = loudness(c.r);
           c.g = loudness(c.g);
           c.b = loudness(c.b);
-          return mix(vec3(1.0), c, sat);
+          return mix(vec3(1.0), clamp(c, 0.0, 1.0), sat);
         }
 
-        vec4 rgba(vec2 vTex) {
+        vec4 rgba() {
           float r = length(v);
           if (r > 0.99 && CIRCLE && !uFlat)
             return vec4(0.0);
@@ -355,7 +368,7 @@ class GpuColorizer extends GpuTransformProgram {
         }
 
         void main () {
-          v_FragColor = rgba(vTex);
+          v_FragColor = rgba();
         }
       `,
     });
