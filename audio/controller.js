@@ -35,6 +35,7 @@ export class AudioController {
 
   constructor(canvas, { stats, fftSize }) {
     this.canvas = canvas;
+    this.canvas_gpu = null;
     this.webgl = null;
     this.stats = stats;
     this.fft_size = fftSize;
@@ -84,22 +85,23 @@ export class AudioController {
       if (e.ctrlKey && e.shiftKey) {
         this.offsetMin = 0;
         this.offsetMax = this.audioSamples.length;
-        requestAnimationFrame(() =>
-          this.drawFrame());
+        this.drawFrame();
       } else if (e.ctrlKey) {
         this.offsetMin = t | 0;
-        requestAnimationFrame(() =>
-          this.drawFrame());
+        this.drawFrame();
       } else if (e.shiftKey) {
         this.offsetMax = t | 0;
-        requestAnimationFrame(() =>
-          this.drawFrame());
+        this.drawFrame();
       }
     };
   }
 
   initGpu() {
-    this.webgl = new GpuContext(this.canvas);
+    this.canvas_gpu = document.createElement('canvas');
+    this.canvas_gpu.width = this.canvas.width;
+    this.canvas_gpu.height = this.canvas.height;
+
+    this.webgl = new GpuContext(this.canvas_gpu);
     this.webgl.init();
 
     let args = {
@@ -113,29 +115,41 @@ export class AudioController {
 
   switchCoords() {
     this.polarCoords = !this.polarCoords;
-    requestAnimationFrame(() =>
-      this.drawFrame(null));
+    this.drawFrame(null);
   }
 
   switchRenderer() {
     let node = this.renderers[this.rendererId];
     node.show_acf = !node.show_acf;
-    requestAnimationFrame(() =>
-      this.drawFrame());
+    this.drawFrame();
   }
 
   drawFrame(input = this.waveform_fb) {
     let node = this.renderers[this.rendererId];
-    let t_min = this.offsetMin - this.fft_size/2;
-    let t_max = this.offsetMax - this.fft_size/2;
+    let t_min = this.offsetMin - this.fft_size / 2;
+    let t_max = this.offsetMax - this.fft_size / 2;
 
-    log.v('FFT step:', (t_max - t_min) / this.canvas.width | 0);
+    let ctx2d = this.canvas.getContext('2d');
+    let w = this.canvas.width;
+    let h = this.canvas.height;
+    let ns = vargs.NUM_STRIPES;
+    let dt = (t_max - t_min) / ns;
 
-    node.exec({
-      uWaveFormFB: input,
-      uOffsetMin: t_min,
-      uOffsetMax: t_max,
-    }, null);
+    log.v('FFT step:', (t_max - t_min) / this.canvas.width / ns | 0);
+
+    requestAnimationFrame(() => {
+      for (let k = 0; k < ns; k++) {
+        node.exec({
+          uWaveFormFB: input,
+          uOffsetMin: t_min + dt * k | 0,
+          uOffsetMax: t_min + dt * (k + 1) | 0,
+        }, null);
+
+        ctx2d.drawImage(this.canvas_gpu,
+          0, 0, w, h,
+          0, h / ns * k | 0, w, h / ns | 0);
+      }
+    });
   }
 
   async start(audioFile) {
@@ -170,8 +184,7 @@ export class AudioController {
       '@', this.audioBuffer.sampleRate, 'Hz',
       'x', this.audioBuffer.numberOfChannels, 'channels');
 
-    requestAnimationFrame(() =>
-      this.drawFrame());
+    this.drawFrame();
   }
 
   stop() {

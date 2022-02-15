@@ -15,6 +15,7 @@ export const USE_MOUSE = numarg('mouse', 1);
 export const HANN_WINDOW = numarg('hann', 1);
 export const VOL_FACTOR = numarg('vol', 1);
 export const SHOW_MIC = numarg('mic', 0);
+export const NUM_STRIPES = numarg('ns', 1);
 
 export const ACF_COLOR_SCHEME = numarg('acf.cs', 1);
 export const ACF_SMODE = strarg('acf.smode');
@@ -22,7 +23,7 @@ export const ACF_LOUDNESS_RANGE = strarg('acf.lr', 2.5);
 export const ACF_AGRAD = numarg('acf.agrad', 0);
 export const ACF_TGRAD = numarg('acf.tgrad', 0);
 export const ACF_R0 = numarg('acf.r0', 0.0);
-export const ACF_POLAR = numarg('acf.polar', 1);
+export const ACF_POLAR = numarg('acf.polar', 0);
 export const ACF_EXP = numarg('acf.exp', 1.5);
 export const ACF_ABS_MAX = numarg('acf.absmax', 1.0);
 export const ACF_STATS = numarg('acf.stats', 0);

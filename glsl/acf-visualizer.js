@@ -9,7 +9,7 @@ import { GpuDownsampler } from './downsampler.js';
 export class GpuAcfVisualizerProgram {
   constructor(webgl, { fft_size, img_size }) {
     this.webgl = webgl;
-    this.flat = false; // that's just initial value
+    this.flat = !vargs.ACF_POLAR; // that's just initial value
     this.show_acf = vargs.SHADER == 'acf';
 
     let size = Math.min(fft_size, vargs.ACF_MAX_SIZE);

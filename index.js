@@ -13,7 +13,6 @@ let btnRec = $('#rec');
 let divStats = $('#stats');
 let vTimeBar = $('#vtimebar');
 let canvas = $('canvas');
-let vAudio = $('audio');
 let audioController = null; // use getAudioController()
 let keyboardHandlers = {};
 let vTimeBarAnimationId = 0;
@@ -202,6 +201,7 @@ function startUpdatingTimeBar() {
     vTimeBar.style.left = '';
   } else {
     let dt = timestamp / duration; // 0..1
+    dt *= vargs.NUM_STRIPES; dt -= Math.floor(dt);
     let px = (dt * canvas.clientWidth).toFixed(2) + 'px';
     vTimeBar.style.width = '';
     vTimeBar.style.height = '';
