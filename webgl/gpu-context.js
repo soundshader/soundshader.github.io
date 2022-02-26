@@ -1,8 +1,8 @@
 import * as log from '../log.js';
-import * as vargs from '../vargs.js';
+import * as vargs from '../url_args.js';
 import { GpuFrameBuffer } from "./framebuffer.js";
 import { GpuProgram } from "./gpu-program.js";
-import { USE_ALPHA_CHANNEL } from "../vargs.js";
+import { USE_ALPHA_CHANNEL } from "../url_args.js";
 
 export class GpuContext {
   constructor(canvas) {

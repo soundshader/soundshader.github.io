@@ -1,11 +1,10 @@
-import * as vargs from './vargs.js';
+import * as vargs from './url_args.js';
 import { AudioController } from './audio/controller.js';
 import { MediaFileRecorder } from './audio/recorder.js';
 import * as log from './log.js';
 
 let $ = x => document.querySelector(x);
 
-let btnPlay = $('#play');
 let btnUpload = $('#upload');
 let btnLogs = $('#log');
 let btnMic = $('#mic');
@@ -43,10 +42,15 @@ function main() {
 }
 
 function setPlayButtonHandler() {
-  btnPlay.onclick = async () => {
+  canvas.ondblclick = async (e) => {
+    let offset = e.offsetX / canvas.clientWidth;
     let controller = getAudioController();
-    controller.playAudio();
-    startUpdatingTimeBar();
+    if (controller.audioDuration > 0) {
+      await controller.stopAudio();
+    } else {
+      await controller.playAudio(offset);
+      startUpdatingTimeBar();
+    }
   };
 }
 

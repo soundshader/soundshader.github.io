@@ -1,5 +1,5 @@
 import * as log from '../log.js';
-import * as vargs from '../vargs.js';
+import * as vargs from '../url_args.js';
 import { GpuContext } from "../webgl/gpu-context.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuAcfVisualizerProgram } from '../glsl/acf-visualizer.js';
@@ -14,13 +14,13 @@ export class AudioController {
   // seconds
   get currentTime() {
     return !this.activeAudio ? null :
-      this.audioCtx.currentTime - this.playbackStarted;
+      this.audioCtx.currentTime - this.playbackStarted + this.playbackOffset;
   }
 
   // seconds
   get audioDuration() {
     return !this.activeAudio ? null :
-      this.activeAudio.buffer.duration;
+      this.activeAudio.buffer.duration + this.playbackOffset;
   }
 
   get polarCoords() {
@@ -187,8 +187,8 @@ export class AudioController {
     this.drawFrame();
   }
 
-  stop() {
-    this.stopAudio();
+  async stop() {
+    await this.stopAudio();
 
     if (this.waveform_fb) {
       this.waveform_fb.destroy();
@@ -196,14 +196,19 @@ export class AudioController {
     }
   }
 
-  async playAudio() {
-    this.stopAudio();
+  async playAudio(offset = 0) {
+    await this.stopAudio();
+
     let audioCtx = this.audioCtx;
     let src_sr = this.audioCtx.sampleRate;
     let res_sr = vargs.SAMPLE_RATE;
     let n_sr = 2 ** (Math.log2(src_sr / res_sr) | 0);
     let t_min = this.offsetMin * n_sr;
     let t_max = this.offsetMax * n_sr;
+
+    if (offset > 0 && offset < 1)
+      t_min += offset * (t_max - t_min) | 0;
+
     let t_len = t_max - t_min;
     let tmpbuf = audioCtx.createBuffer(1, t_len, src_sr);
     this.audioBuffer.copyFromChannel(tmpbuf.getChannelData(0), 0, t_min);
@@ -213,23 +218,28 @@ export class AudioController {
     source.connect(this.destNode);
     this.activeAudio = source;
     this.playbackStarted = audioCtx.currentTime;
+    this.playbackOffset = tmpbuf.duration / (1 - offset) * offset;
+
     log.i('Playing audio sample', tmpbuf.duration.toFixed(1), 'sec');
     source.start();
-    return new Promise((resolve) => {
+
+    this.playAudioPromise = new Promise((resolve) => {
       source.onended = () => {
         this.activeAudio = null;
-        log.i('Done playing audio');
+        log.i('Audio playback stopped');
         resolve();
       };
     });
   }
 
-  stopAudio() {
-    if (this.activeAudio) {
-      this.activeAudio.stop();
-      this.activeAudio.disconnect();
-      this.activeAudio = null;
-    }
+  async stopAudio() {
+    if (!this.activeAudio) return;
+    log.i('Stopping audio playback');
+    this.activeAudio.stop();
+    this.activeAudio.disconnect();
+    await this.playAudioPromise;
+    this.activeAudio = null;
+    this.playAudioPromise = null;
   }
 
   createAudioContext() {

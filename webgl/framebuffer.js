@@ -1,5 +1,5 @@
 import * as log from '../log.js';
-import * as vargs from '../vargs.js';
+import * as vargs from '../url_args.js';
 
 export class GpuFrameBuffer {
   constructor(webgl, {

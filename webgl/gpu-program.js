@@ -1,4 +1,4 @@
-import * as vargs from '../vargs.js';
+import * as vargs from '../url_args.js';
 import * as log from '../log.js';
 
 const SHADER_PREFACE = `

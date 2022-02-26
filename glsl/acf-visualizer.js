@@ -1,5 +1,5 @@
 import * as log from '../log.js';
-import * as vargs from "../vargs.js";
+import * as vargs from "../url_args.js";
 import { GpuFFT } from "../audio/fft.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
