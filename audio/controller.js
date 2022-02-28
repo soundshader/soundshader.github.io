@@ -155,11 +155,11 @@ export class AudioController {
   async start(audioFile) {
     stop();
 
-    // The audio wave is packed in a NxNx1 buffer.
+    // The audio wave is packed in a NxNx4 buffer.
     // N here has nothing to do with FFT size.
-    let fb_size = 4096 ** 2;
+    let fb_size = 2048 ** 2 * 4;
     this.waveform_fb = new GpuFrameBuffer(this.webgl,
-      { size: fb_size ** 0.5 });
+      { size: (fb_size/4) ** 0.5, channels: 4 });
 
     let encodedAudio = await audioFile.arrayBuffer();
     this.audioCtx = this.createAudioContext();

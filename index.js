@@ -32,7 +32,7 @@ function main() {
   log.i('Image size:', vargs.IMAGE_SIZE);
   log.i('Sample rate:', vargs.SAMPLE_RATE, 'Hz');
   log.i('A4 note:', vargs.A4_FREQ, 'Hz');
-  log.i('FFT size:', vargs.FFT_SIZE);
+  log.i('FFT size:', vargs.FFT_SIZE, '=', vargs.FFT_SIZE / vargs.SAMPLE_RATE * 1000 | 0, 'ms');
   setKeyboardHandlers();
   setMouseHandlers();
   setRecordingHandler();

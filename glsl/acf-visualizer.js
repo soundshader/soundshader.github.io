@@ -20,7 +20,8 @@ export class GpuAcfVisualizerProgram {
 
     this.gpuACF = new GpuACF(webgl, { fft_size, num_frames: size });
     this.heightMap = new GpuHeightMapProgram(webgl, { size, channels: 4 });
-    this.smooth_max = new GpuSmoothMax(webgl, { size, factor: vargs.ACF_LOUDNESS_DECAY });
+    this.smooth_max = new GpuSmoothMax(webgl,
+      { size, factor: 2 ** (Math.log2(vargs.ACF_LOUDNESS_DECAY) / fft_size) });
     this.downsampler1 = new GpuDownsampler(webgl, { width: size, height: size, aa, channels: 4 });
     this.downsampler2 = new GpuDownsampler(webgl,
       { width: 1, height: fft_size, aa: Math.log2(fft_size / size), channels: 4 });
@@ -109,12 +110,17 @@ class GpuACF {
             span * pos.x / (F - 1) :
             span / (F - 1) * pos.x;
             
-          int f = uOffsetMin + diff + pos.y;
-          int i = f / size.x;
-          int j = f % size.x;
-          v_FragColor = f >= 0 && f < size.x * size.y ?
-            texelFetch(uWaveFormFB, ivec2(j, i), 0) :
-            vec4(0.0);
+          int t = uOffsetMin + diff + pos.y;
+          int i = t / (4 * size.x);
+          int j = t % (4 * size.x);
+
+          if (t < 0 || t >= size.x * size.y * 4) {
+            v_FragColor = vec4(0.0);
+            return;
+          }
+
+          vec4 tex = texelFetch(uWaveFormFB, ivec2(j / 4, i), 0);
+          v_FragColor = vec4(tex[j % 4], 0.0, 0.0, 0.0);
         }
       `,
     });
@@ -224,8 +230,8 @@ class GpuACF {
   exec({ uWaveFormFB, uOffsetMin, uOffsetMax }, uACF) {
     if (uACF.width != this.num_frames || uACF.height != this.fft_size || uACF.channels != 4)
       throw new Error('ACF output must be a FxNx4 buffer');
-    if (uWaveFormFB.channels != 1)
-      throw new Error('ACF input must be a NxNx1 buffer');
+    if (uWaveFormFB.channels != 4)
+      throw new Error('ACF input must be a NxNx4 buffer');
 
     this.frame_selector.exec({ uWaveFormFB, uOffsetMin, uOffsetMax }, this.temp1a);
     if (vargs.HANN_WINDOW)
