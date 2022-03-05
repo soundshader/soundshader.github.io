@@ -1,6 +1,6 @@
 import * as log from '../log.js';
 import * as vargs from "../url_args.js";
-import { GpuFFT } from "../audio/fft.js";
+import { GpuFFT, GpuDCT } from "../audio/fft.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
 import { textureUtils, shaderUtils, colorUtils } from "./basics.js";
@@ -9,7 +9,7 @@ import { GpuDownsampler } from './downsampler.js';
 export class GpuAcfVisualizerProgram {
   constructor(webgl, { fft_size, img_size }) {
     this.webgl = webgl;
-    this.flat = !vargs.ACF_POLAR; // that's just initial value
+    this.flat = !vargs.ACF_POLAR;
     this.show_acf = vargs.SHADER == 'acf';
 
     let size = Math.min(fft_size, vargs.ACF_MAX_SIZE);
@@ -76,14 +76,13 @@ class GpuACF {
     this.show_acf = true;
     this.num_frames = num_frames;
     this.fft = new GpuFFT(webgl, { width: num_frames, height: fft_size, layout: 'cols' });
-    this.temp1a = new GpuFrameBuffer(webgl, { width: num_frames, height: fft_size, channels: 1 });
+    this.dct = new GpuDCT(webgl, { width: num_frames, height: fft_size, layout: 'cols' });
+    this.temp1a = new GpuFrameBuffer(webgl, { width: num_frames, height: fft_size, channels: 2 });
 
     this.temp2a = new GpuFrameBuffer(webgl, { width: num_frames, height: fft_size, channels: 2 });
     this.temp2b = new GpuFrameBuffer(webgl, { width: num_frames, height: fft_size, channels: 2 });
 
-    this.fft_rgb = new GpuFrameBuffer(webgl, { width: num_frames, height: fft_size, channels: 4 });
-
-    this.fft_a = new GpuFrameBuffer(webgl, { width: num_frames, height: fft_size, channels: 1 });
+    this.fft_a = new GpuFrameBuffer(webgl, { width: num_frames, height: fft_size, channels: 4 });
     this.fft_r = new GpuFrameBuffer(webgl, { width: num_frames, height: fft_size, channels: 1 });
     this.fft_g = new GpuFrameBuffer(webgl, { width: num_frames, height: fft_size, channels: 1 });
     this.fft_b = new GpuFrameBuffer(webgl, { width: num_frames, height: fft_size, channels: 1 });
@@ -240,10 +239,10 @@ class GpuACF {
     this.sqr_abs.exec({ uInput: this.temp2b }, this.temp2a);
 
     if (vargs.ACF_RGB) {
-      this.rgb_mask.exec({ uFFT: this.temp2a }, this.fft_rgb);
-      this.dot_prod.exec({ uInput: this.fft_rgb, uProd: [1, 0, 0, 0] }, this.fft_r);
-      this.dot_prod.exec({ uInput: this.fft_rgb, uProd: [0, 1, 0, 0] }, this.fft_g);
-      this.dot_prod.exec({ uInput: this.fft_rgb, uProd: [0, 0, 1, 0] }, this.fft_b);
+      this.rgb_mask.exec({ uFFT: this.temp2a }, this.fft_a);
+      this.dot_prod.exec({ uInput: this.fft_a, uProd: [1, 0, 0, 0] }, this.fft_r);
+      this.dot_prod.exec({ uInput: this.fft_a, uProd: [0, 1, 0, 0] }, this.fft_g);
+      this.dot_prod.exec({ uInput: this.fft_a, uProd: [0, 0, 1, 0] }, this.fft_b);
     }
 
     // In general, ACF[X] needs to do inverseFFT[S]
@@ -306,7 +305,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
         vec4 fetch_rect() {
           float r = vTex.x;
           float t = r;
-          float a = vTex.y * 0.5;
+          float a = vTex.y / float(${vargs.ZOOM});
           return h_acf(vec2(t, a));
         }
 
@@ -328,7 +327,7 @@ class GpuColorizer extends GpuTransformProgram {
         const float N = ${size}.0;
         const float R_MAX = 0.9;
         const bool CIRCLE = true;
-        const float LOUDNESS_RANGE = float(${vargs.ACF_LOUDNESS_RANGE});
+        const float LOUDNESS_RANGE = float(${vargs.DB_RANGE / 20});
 
         ${colorUtils}
 
@@ -354,8 +353,7 @@ class GpuColorizer extends GpuTransformProgram {
           vec4 h = h_acf();
           float sat = 1.0 - h.x * h.x;
           vec3 c = ${!!vargs.ACF_RGB} ? abs(h.yzw) :
-            abs(h.x) * vec3(1.0, 2.0, 4.0);
-          c *= float(${vargs.VOL_FACTOR});
+            abs(h.x) * vec3(4.0, 2.0, 1.0);
           c.r = loudness(c.r);
           c.g = loudness(c.g);
           c.b = loudness(c.b);

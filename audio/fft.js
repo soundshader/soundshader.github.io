@@ -344,49 +344,53 @@ export class GpuFFT extends GpuTransformProgram {
       this.initTexRevIdxCompact() :
       this.initTexRevIdxFlat();
 
+    this.shader_utils = `
+      const int TW = ${width};
+      const int TH = ${height};
+      const ivec2 WH = ivec2(TW, TH);
+      const float PI = ${Math.PI};
+      const int N = 
+        ${layout == 'rows'} ? TW : 
+        ${layout == 'cols'} ? TH :
+        TW * TH;
+
+      // exp(2*PI*i/n)^k
+      vec2 kth_root(int k, int n) {
+        float w = 2.0 * PI * float(k) / float(n);
+        return vec2(cos(w), sin(w));
+      }
+
+      int eindex(ivec2 vTexN) {
+        if (${layout == 'rows'}) return vTexN.x;
+        if (${layout == 'cols'}) return vTexN.y;
+        return vTexN.x + TW * vTexN.y;
+      }
+
+      ivec2 ecoords(int i) {
+        if (${layout == 'rows'}) return ivec2(i, int(vTex.y * float(TH) - 0.5));
+        if (${layout == 'cols'}) return ivec2(int(vTex.x * float(TW) - 0.5), i);
+        return ivec2(i % TW, i / TW);
+      }
+
+      vec2 element(int i) {
+        return texelFetch(uInput, ecoords(i), 0).xy;
+      }
+
+      vec2 multiply(vec2 u, vec2 v) {
+        float re = u.x * v.x - u.y * v.y;
+        float im = u.x * v.y + u.y * v.x;
+        return vec2(re, im);
+      }
+    `;
+
     this.init({
       fshader: `
         in vec2 vTex;
 
-        const int TW = ${width};
-        const int TH = ${height};
-        const ivec2 WH = ivec2(TW, TH);
-        const float PI = ${Math.PI};
-        const int N = 
-          ${layout == 'rows'} ? TW : 
-          ${layout == 'cols'} ? TH :
-          TW * TH;
-
         uniform sampler2D uInput;
         uniform int uScale; // 2, 4, 8, .., n
 
-        // exp(2*PI*i/N)^k
-        vec2 kth_root(int k) {
-          float w = 2.0 * PI * float(k) / float(N);
-          return vec2(cos(w), sin(w));
-        }
-
-        int eindex(ivec2 vTexN) {
-          if (${layout == 'rows'}) return vTexN.x;
-          if (${layout == 'cols'}) return vTexN.y;
-          return vTexN.x + TW * vTexN.y;
-        }
-
-        ivec2 ecoords(int i) {
-          if (${layout == 'rows'}) return ivec2(i, int(vTex.y * float(TH) - 0.5));
-          if (${layout == 'cols'}) return ivec2(int(vTex.x * float(TW) - 0.5), i);
-          return ivec2(i % TW, i / TW);
-        }
-
-        vec2 element(int i) {
-          return texelFetch(uInput, ecoords(i), 0).xy;
-        }
-
-        vec2 multiply(vec2 u, vec2 v) {
-          float re = u.x * v.x - u.y * v.y;
-          float im = u.x * v.y + u.y * v.x;
-          return vec2(re, im);
-        }
+        ${this.shader_utils}
 
         void main() {
           int i = eindex(ivec2(vTex * vec2(WH) - 0.5));
@@ -396,7 +400,7 @@ export class GpuFFT extends GpuTransformProgram {
   
           vec2 u = element(j * s + k);         // E[k] = even
           vec2 v = element(j * s + k + s / 2); // O[k] = odd
-          vec2 t = multiply(v, kth_root(N / s * k));
+          vec2 t = multiply(v, kth_root(N / s * k, N));
   
           // E[k] + O[k] * exp(...) = X[k]
           // E[k] - O[k] * exp(...) = X[k + s/2]
@@ -523,5 +527,69 @@ export class GpuFFT extends GpuTransformProgram {
       height: this.layout == 'cols' ? n : 1,
       source: new Float32Array(revidx),
     });
+  }
+}
+
+// Computes DCT-II of a real valued input using complex DFT of half the length:
+//    http://www.robinscheibler.org/2013/02/13/real-fft.html
+// Input:
+//    X[0..N-1] real valued signal, with the same layout as in GpuFFT.
+// Output:
+//    Y[0..N-1] real valued amplitudes, identical to FFT of {X[0]..X[N-1],X[N-1]..X[0]}.
+export class GpuDCT {
+  constructor(webgl, args) {
+    let width = args.width;
+    let height = args.height;
+
+    this.fft = new GpuFFT(webgl, args);
+    this.dct_tex1 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
+
+    this.mirror_re_im = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+        uniform sampler2D uInput;
+
+        ${this.fft.shader_utils}
+
+        float mirrored(int i) {
+          return element(abs(N - i)).x;
+        }
+
+        void main() {
+          int i = eindex(ivec2(vTex * vec2(WH) - 0.5));
+          float re = mirrored(2 * i);
+          float im = mirrored(2 * i + 1);
+          v_FragColor = vec4(re, im, 0.0, 0.0);
+        }
+      `
+    });
+
+    this.post_process = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+        uniform sampler2D uInput;
+
+        const vec2 CONJ = vec2(1.0, -1.0);
+        const mat2 IMUL = mat2(0.0, 1.0, -1.0, 0.0);
+
+        ${this.fft.shader_utils}
+
+        void main() {
+          int k = eindex(ivec2(vTex * vec2(WH) - 0.5));
+          vec2 u = element(k);
+          vec2 v = element(N - k) * CONJ;
+          vec2 X_e = 0.5 * (u + v);
+          vec2 X_o = 0.5 * (u - v) * IMUL;
+          vec2 X = X_e + multiply(X_o, kth_root(k, 2*N));
+          v_FragColor = vec4(X, 0.0, 0.0);
+        }
+      `
+    });
+  }
+
+  exec({ uInput }, output) {
+    this.mirror_re_im.exec({ uInput }, this.dct_tex1);
+    this.fft.exec({ uInput: this.dct_tex1 }, this.dct_tex1); // DFT
+    this.post_process.exec({ uInput: this.dct_tex1 }, output);
   }
 }

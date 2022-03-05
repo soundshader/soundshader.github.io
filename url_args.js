@@ -11,11 +11,11 @@ export const SAMPLE_RATE = strarg('sr', 'A10', /^A?\d+$/,
 export const IMAGE_SIZE = numarg('img', 2048);
 export const USE_MOUSE = numarg('mouse', 1);
 export const HANN_WINDOW = numarg('hann', 1);
-export const VOL_FACTOR = numarg('vol', 1);
 export const SHOW_MIC = numarg('mic', 0);
 export const NUM_STRIPES = numarg('ns', 1);
+export const ZOOM = numarg('zoom', 1);
 
-export const ACF_LOUDNESS_RANGE = strarg('acf.lr', 2.5);
+export const DB_RANGE = strarg('db', 50);
 export const ACF_R0 = numarg('acf.r0', 0.0);
 export const ACF_POLAR = numarg('acf.polar', 0);
 export const ACF_MAX_SIZE = numarg('acf.max', 4096);

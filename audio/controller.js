@@ -4,8 +4,6 @@ import { GpuContext } from "../webgl/gpu-context.js";
 import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuAcfVisualizerProgram } from '../glsl/acf-visualizer.js';
 
-// Uses WebAudio's getFloatTimeDomainData() to read the raw audio samples
-// and then applies FFT to compute amplitudes and phases (important!).
 export class AudioController {
   get audioStream() {
     return this.destNode.stream;
