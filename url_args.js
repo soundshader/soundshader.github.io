@@ -5,6 +5,7 @@ console.groupCollapsed('Config:');
 export const DEBUG = numarg('dbg', 0);
 export const FFT_SIZE = numarg('n', 2048); // 2048 is the max on Android
 export const SHADER = strarg('s', 'acf');
+export const USE_DCT = numarg('dct', 0);
 export const A4_FREQ = numarg('a4', 432);
 export const SAMPLE_RATE = strarg('sr', 'A10', /^A?\d+$/,
   s => +s || 2 ** (s.slice(1) - 4) * A4_FREQ);
@@ -19,13 +20,13 @@ export const DB_RANGE = strarg('db', 50);
 export const ACF_R0 = numarg('acf.r0', 0.0);
 export const ACF_POLAR = numarg('acf.polar', 0);
 export const ACF_MAX_SIZE = numarg('acf.max', 4096);
-export const ACF_RGB = numarg('acf.rgb', 1);
+export const ACF_RGB = numarg('rgb', 1);
 export const ACF_DYN_LOUDNESS = numarg('acf.dyn', 1);
 // FFT |amp|^2 decay after one full FFT frame (e.g. 2048 samples).
 // The rationale is that FFT buffer corresponds to the ear's audio
 // buffer of ~100ms.
 export const ACF_LOUDNESS_DECAY = numarg('decay', 0.1);
-export const ACF_MUTE_RANGE = numarg('acf.mr', 1);
+export const ACF_MUTE_RANGE = numarg('mute', 0);
 
 export const REC_FRAMERATE = numarg('rec.fps', 0);
 export const USE_ALPHA_CHANNEL = numarg('alpha', 0);

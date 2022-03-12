@@ -57,7 +57,7 @@ export class AudioController {
 
   canvasYtoF(offsetY) {
     let y = offsetY / this.canvas.clientHeight;
-    return vargs.SAMPLE_RATE / 2 * (1 - y);
+    return vargs.SAMPLE_RATE / vargs.ZOOM * (1 - y);
   }
 
   initMouse() {

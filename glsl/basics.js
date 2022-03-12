@@ -93,6 +93,11 @@ export const shaderUtils = `
   float hann_step(float x, float a, float b) {
     return x < a ? 0.0 : x > b ? 1.0 : hann((x - a) / (b - a) * 0.5);
   }
+
+  float gauss(float x, float sigma) {
+    const float SQRT_2PI = ${Math.sqrt(2 * Math.PI)};
+    return exp(-0.5 * sqr(x / sigma)) / (SQRT_2PI * sigma);
+  }
 `;
 
 export const textureUtils = `
@@ -126,5 +131,9 @@ export const complexMath = `
 
   vec2 iconj(vec2 a) {
     return vec2(a.x, -a.y);
+  }
+
+  vec2 idiv(vec2 a, vec2 b) {
+    return imul(a, iconj(b)) / dot(b, b);
   }
 `;

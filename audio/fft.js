@@ -417,6 +417,7 @@ export class GpuFFT extends GpuTransformProgram {
 
         uniform sampler2D uInput;
         uniform sampler2D uRevIdx;
+        uniform bool uInverseFFT;
 
         const vec2 N_WH = vec2(${width}.0, ${height}.0);
 
@@ -431,7 +432,8 @@ export class GpuFFT extends GpuTransformProgram {
             ${layout == 'rows'} ? ivec2(revidx(r.x, 0).x, r.y) :
             ${layout == 'cols'} ? ivec2(r.x, revidx(0, r.y).x) :
             revidx(r.x, r.y);
-          v_FragColor = texelFetch(uInput, s, 0);
+          vec4 conj = vec4(1.0, uInverseFFT ? -1.0 : 1.0, 1.0, 1.0);
+          v_FragColor = texelFetch(uInput, s, 0) * conj;
         }
       `,
     });
@@ -442,6 +444,7 @@ export class GpuFFT extends GpuTransformProgram {
         in vec2 vTex;
 
         uniform sampler2D uInput;
+        uniform bool uInverseFFT;
 
         const int TW = ${width};
         const int TH = ${height};
@@ -451,14 +454,15 @@ export class GpuFFT extends GpuTransformProgram {
           TW * TH;
 
         void main() {
-          vec4 reim = texture(uInput, vTex);
+          vec4 conj = vec4(1.0, uInverseFFT ? -1.0 : 1.0, 1.0, 1.0);
+          vec4 reim = texture(uInput, vTex) * conj;
           v_FragColor = reim / sqrt(float(N));
         }
       `,
     });
   }
 
-  exec({ uInput }, output) {
+  exec({ uInput, uInverseFFT = false }, output) {
     let tex1 = this.texture1;
     let tex2 = this.texture2;
 
@@ -474,6 +478,7 @@ export class GpuFFT extends GpuTransformProgram {
     this.reverser.exec({
       uInput: tex,
       uRevIdx: this.texRevIdx,
+      uInverseFFT,
     }, tex2);
     tex1.source = null;
 
@@ -491,6 +496,7 @@ export class GpuFFT extends GpuTransformProgram {
 
     this.normalizer.exec({
       uInput: tex2,
+      uInverseFFT,
     }, output || (this.output = tex1));
   }
 
@@ -534,15 +540,20 @@ export class GpuFFT extends GpuTransformProgram {
 //    http://www.robinscheibler.org/2013/02/13/real-fft.html
 // Input:
 //    X[0..N-1] real valued signal, with the same layout as in GpuFFT.
+//    DCT will (virtually) mirror it, to make it a real and even signal.
 // Output:
 //    Y[0..N-1] real valued amplitudes, identical to FFT of {X[0]..X[N-1],X[N-1]..X[0]}.
+//    This is the 1st half of the DCT output. The 2nd half is the reflection of the 1st:
+//    Y[2N-k] = Y*[k] = Y[k]. The middle element Y[N] is not available.
+//
+// DCT-II is its own inverse, so applying this shader twice restores the original signal.
 export class GpuDCT {
   constructor(webgl, args) {
     let width = args.width;
     let height = args.height;
 
     this.fft = new GpuFFT(webgl, args);
-    this.dct_tex1 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
+    this.tex1 = new GpuFrameBuffer(webgl, { width, height, channels: 2 });
 
     this.mirror_re_im = new GpuTransformProgram(webgl, {
       fshader: `
@@ -552,7 +563,7 @@ export class GpuDCT {
         ${this.fft.shader_utils}
 
         float mirrored(int i) {
-          return element(abs(N - i)).x;
+          return element(N - abs(N - i)).x;
         }
 
         void main() {
@@ -581,15 +592,64 @@ export class GpuDCT {
           vec2 X_e = 0.5 * (u + v);
           vec2 X_o = 0.5 * (u - v) * IMUL;
           vec2 X = X_e + multiply(X_o, kth_root(k, 2*N));
-          v_FragColor = vec4(X, 0.0, 0.0);
+          v_FragColor = vec4(X, 0.0, 0.0); // Im[X] = 0 here, it's DCT-II
+        }
+      `
+    });
+
+    this.prepare_inv = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+        uniform sampler2D uInput;
+
+        const vec2 CONJ = vec2(1.0, -1.0);
+        const mat2 IMUL = mat2(0.0, 1.0, -1.0, 0.0);
+
+        ${this.fft.shader_utils}
+
+        void main() {
+          int k = eindex(ivec2(vTex * vec2(WH) - 0.5));
+          vec2 u = element(k);              // Im[u] = 0 if that's output of DCT-II
+          vec2 v = element(N - k) * CONJ;   // Im[v] = 0, same reason
+          vec2 X_e = 0.5 * (u + v);
+          vec2 X_o = 0.5 * (u - v);
+          vec2 Z = X_e + multiply(X_o, kth_root(-k, 2*N)) * IMUL;
+          // conjugate Z so FFT after this shader acts as the inverse FFT
+          v_FragColor = vec4(Z * CONJ, 0.0, 0.0);
+        }
+      `
+    });
+
+    this.split_re_im = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+        uniform sampler2D uInput;
+
+        const vec2 CONJ = vec2(1.0, -1.0);
+
+        ${this.fft.shader_utils}
+
+        void main() {
+          int k = eindex(ivec2(vTex * vec2(WH) - 0.5));
+          vec2 z = element(k / 2) * CONJ;   // conjugate because FFT acts as the inverse FFT here
+          float x = z[k % 2];               // Re[z] for even k, Im[z] for odd k
+          v_FragColor = vec4(x, 0.0, 0.0, 0.0);
         }
       `
     });
   }
 
   exec({ uInput }, output) {
-    this.mirror_re_im.exec({ uInput }, this.dct_tex1);
-    this.fft.exec({ uInput: this.dct_tex1 }, this.dct_tex1); // DFT
-    this.post_process.exec({ uInput: this.dct_tex1 }, output);
+    this.mirror_re_im.exec({ uInput }, this.tex1);
+    this.fft.exec({ uInput: this.tex1 }, this.tex1); // DFT
+    this.post_process.exec({ uInput: this.tex1 }, output);
+  }
+
+  inverse({ uInput }, output) {
+    this.prepare_inv.exec({ uInput }, this.tex1);
+    this.fft.exec({ uInput: this.tex1 }, this.tex1); // inverse DFT
+    this.split_re_im.exec({ uInput: this.tex1 }, output);
   }
 }
+
+window.FFT = FFT;

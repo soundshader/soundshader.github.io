@@ -142,6 +142,30 @@ function setKeyboardHandlers() {
 
   setKeyboardHandler('f', 'Switch FFT vs ACF',
     () => getAudioController().switchRenderer());
+
+  setKeyboardHandler('u', 'Up freq mod', () => {
+    let acf = audioController.renderers[0].gpuACF;
+    log.v('freq_mod:', ++acf.freq_mod);
+    audioController.drawFrame();
+  });
+
+  setKeyboardHandler('j', 'Down freq mod', () => {
+    let acf = audioController.renderers[0].gpuACF;
+    log.v('freq_mod:', --acf.freq_mod);
+    audioController.drawFrame();
+  });
+
+  setKeyboardHandler('i', 'Up freq rem', () => {
+    let acf = audioController.renderers[0].gpuACF;
+    log.v('freq_rem:', ++acf.freq_rem);
+    audioController.drawFrame();
+  });
+
+  setKeyboardHandler('k', 'Down freq rem', () => {
+    let acf = audioController.renderers[0].gpuACF;
+    log.v('freq_rem:', --acf.freq_rem);
+    audioController.drawFrame();
+  });
 }
 
 function setKeyboardHandler(key, description, handler) {
