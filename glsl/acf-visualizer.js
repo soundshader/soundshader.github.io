@@ -5,6 +5,7 @@ import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
 import { textureUtils, shaderUtils, colorUtils, complexMath } from "./basics.js";
 import { GpuDownsampler } from './downsampler.js';
+import { GpuStatsFlat } from './stats.js';
 
 export class GpuAcfVisualizerProgram {
   constructor(webgl, { fft_size, img_size }) {
@@ -25,11 +26,13 @@ export class GpuAcfVisualizerProgram {
     this.downsampler2 = new GpuDownsampler(webgl,
       { width: 1, height: fft_size, aa: Math.log2(fft_size / size), channels: 4 });
     this.colorizer = new GpuColorizer(webgl, { size });
+    this.stats = new GpuStatsFlat(webgl, { width: size });
 
     this.acfBuffer = new GpuFrameBuffer(webgl, { width: size, height: fft_size, channels: 4 });
     this.acfBufferAA = new GpuFrameBuffer(webgl, { size, channels: 4 });
     this.heightMapAA = new GpuFrameBuffer(webgl, { size: img_size, channels: 4 });
     this.fb_smooth_max = new GpuFrameBuffer(webgl, { width: size, height: 1 });
+    this.fb_smooth_max_stats = new GpuFrameBuffer(webgl, { size: 1, channels: 4 });
   }
 
   exec({ uWaveFormFB, uOffsetMin, uOffsetMax }, output) {
@@ -51,6 +54,9 @@ export class GpuAcfVisualizerProgram {
         this.acfBufferAA,
         this.fb_smooth_max);
 
+      this.stats.exec({ uData: this.fb_smooth_max },
+        this.fb_smooth_max_stats);
+
       this.heightMap.exec({
         uFlat: this.flat,
         uACF: this.acfBufferAA,
@@ -65,6 +71,11 @@ export class GpuAcfVisualizerProgram {
         uFlat: this.flat,
         uHeightMap: this.heightMapAA,
       }, output);
+
+      let [s_min, s_max, s_avg] = this.fb_smooth_max_stats.download();
+      log.i('min..max:', Math.log10(s_min) * 20 | 0,
+        '..', Math.log10(s_max) * 20 | 0, 'dB',
+        'avg:', Math.log10(s_avg) * 20 | 0, 'dB');
     }
   }
 }
@@ -77,7 +88,7 @@ class GpuACF {
     this.freq_rem = 0;
     this.num_frames = num_frames;
 
-    this.fft = vargs.USE_DCT ? 
+    this.fft = vargs.USE_DCT ?
       new GpuDCT(webgl, { width: num_frames, height: fft_size, layout: 'cols' }) :
       new GpuFFT(webgl, { width: num_frames, height: fft_size, layout: 'cols' });
 
@@ -331,6 +342,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
           float r = vTex.x;
           float t = r;
           float a = vTex.y / float(${vargs.ZOOM});
+          if (${!vargs.USE_DCT}) a *= 0.5;
           return h_acf(vec2(t, a));
         }
 

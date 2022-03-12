@@ -146,12 +146,14 @@ function setKeyboardHandlers() {
   setKeyboardHandler('u', 'Up freq mod', () => {
     let acf = audioController.renderers[0].gpuACF;
     log.v('freq_mod:', ++acf.freq_mod);
+    acf.freq_rem = 0;
     audioController.drawFrame();
   });
 
   setKeyboardHandler('j', 'Down freq mod', () => {
     let acf = audioController.renderers[0].gpuACF;
     log.v('freq_mod:', --acf.freq_mod);
+    acf.freq_rem = 0;
     audioController.drawFrame();
   });
 
