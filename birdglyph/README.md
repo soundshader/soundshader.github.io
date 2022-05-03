@@ -1,6 +1,6 @@
 # Birdglyphs
 
-Birdglyphs are spatial representation of birdsongs.
+Birdglyphs are spatial representations of birdsongs.
 
 Click on the images to see the corresponding birdsongs on xeno-canto.org.
 
