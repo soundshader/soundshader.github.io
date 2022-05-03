@@ -38,7 +38,14 @@ function main() {
   setRecordingHandler();
   setLogsHandler();
   setPlayButtonHandler();
+  setHashChangeHandler();
   divStats.textContent = 'Select a file or use mic.';
+}
+
+function setHashChangeHandler() {
+  window.onhashchange = () => {
+    audioController.drawFrame();
+  };
 }
 
 function setPlayButtonHandler() {

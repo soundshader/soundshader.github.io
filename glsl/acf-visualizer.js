@@ -54,9 +54,6 @@ export class GpuAcfVisualizerProgram {
         this.acfBufferAA,
         this.fb_smooth_max);
 
-      this.stats.exec({ uData: this.fb_smooth_max },
-        this.fb_smooth_max_stats);
-
       this.heightMap.exec({
         uFlat: this.flat,
         uACF: this.acfBufferAA,
@@ -72,10 +69,15 @@ export class GpuAcfVisualizerProgram {
         uHeightMap: this.heightMapAA,
       }, output);
 
-      let [s_min, s_max, s_avg] = this.fb_smooth_max_stats.download();
-      log.i('min..max:', Math.log10(s_min) * 20 | 0,
-        '..', Math.log10(s_max) * 20 | 0, 'dB',
-        'avg:', Math.log10(s_avg) * 20 | 0, 'dB');
+      if (vargs.DEBUG) {
+        this.stats.exec({ uData: this.fb_smooth_max },
+          this.fb_smooth_max_stats);
+
+        let [s_min, s_max, s_avg] = this.fb_smooth_max_stats.download();
+        log.i('min..max:', Math.log10(s_min) * 20 | 0,
+          '..', Math.log10(s_max) * 20 | 0, 'dB',
+          'avg:', Math.log10(s_avg) * 20 | 0, 'dB');
+      }
     }
   }
 }
@@ -255,6 +257,17 @@ class GpuACF {
         }
       `,
     });
+
+    this.transpose = new GpuTransformProgram(webgl, {
+      fshader: `
+        in vec2 vTex;
+        uniform sampler2D uInput;
+
+        void main() {
+          v_FragColor = texture(uInput, vec2(vTex.y, vTex.x));
+        }
+      `,
+    });
   }
 
   exec({ uWaveFormFB, uOffsetMin, uOffsetMax }, uACF) {
@@ -288,6 +301,17 @@ class GpuACF {
         this.fft.exec({ uInput: this.fft_r }, this.fft_r);
         this.fft.exec({ uInput: this.fft_g }, this.fft_g);
         this.fft.exec({ uInput: this.fft_b }, this.fft_b);
+      }
+    }
+
+    if (vargs.H_TACF.get() == '1') {
+      for (let t of [t2]) {
+        this.transpose.exec({ uInput: t }, t1);
+        // this.hann_window.exec({ uWave: t1 }, t2);
+        this.fft.exec({ uInput: t1 }, t3);
+        this.sqr_abs.exec({ uInput: t3 }, t1);
+        this.fft.exec({ uInput: t1 }, t1);
+        this.transpose.exec({ uInput: t1 }, t);
       }
     }
 
@@ -335,7 +359,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
           float a = ${!!vargs.USE_DCT} ?
             abs(mod(arg/PI + 2.5, 2.0) - 1.0) :
             -0.25 + 0.5 * arg / PI;
-          return h_acf(vec2(t, a));
+          return h_acf(vec2(a, r * 0.5));
         }
 
         vec4 fetch_rect() {

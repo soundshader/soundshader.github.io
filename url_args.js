@@ -1,4 +1,10 @@
-let args = new URLSearchParams(location.search);
+let q_args = new URLSearchParams(location.search);
+
+// Dynamic args.
+
+export const H_TACF = h_strarg('tacf');
+
+// Static args.
 
 console.groupCollapsed('Config:');
 
@@ -7,8 +13,10 @@ export const FFT_SIZE = numarg('n', 2048); // 2048 is the max on Android
 export const SHADER = strarg('s', 'acf');
 export const USE_DCT = numarg('dct', 0);
 export const A4_FREQ = numarg('a4', 432);
-export const SAMPLE_RATE = strarg('sr', 'A10', /^A?\d+$/,
-  s => +s || 2 ** (s.slice(1) - 4) * A4_FREQ);
+export const SAMPLE_RATE = strarg('sr', 'A10', {
+  regex: /^A?\d+$/,
+  parse: s => +s || 2 ** (s.slice(1) - 4) * A4_FREQ,
+});
 export const IMAGE_SIZE = numarg('img', 2048);
 export const USE_MOUSE = numarg('mouse', 1);
 export const HANN_WINDOW = numarg('hann', 1);
@@ -37,19 +45,28 @@ export const INT_PRECISION = strarg('ip', 'highp');
 
 console.groupEnd();
 
-function strarg(name, defval = '', regex = null, parser_fn = null) {
-  let value = args.get(name);
+function strarg(name, defval = '', { regex, parse } = {}) {
+  let value = q_args.get(name);
   if (value === null)
     value = defval;
   let info = '?' + name + '=' + value;
   console.log(info);
   if (regex && !regex.test(value))
     throw new Error(info + ' doesnt match ' + regex);
-  if (parser_fn)
-    value = parser_fn(value);
+  if (parse)
+    value = parse(value);
   return value;
 }
 
 function numarg(name, defval = 0) {
   return +strarg(name, defval + '', /^\d+(\.\d+)?$/);
+}
+
+function h_strarg(name) {
+  return {
+    get() {
+      let h_args = new URLSearchParams(location.hash.slice(1));
+      return h_args.get(name);
+    }
+  };
 }

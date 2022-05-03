@@ -6,6 +6,7 @@
 1. [Wigner transform spectrograms](https://soundshader.github.io/hss/gallery/wigner)
 1. [Vowels and colored ACF](https://soundshader.github.io/vowels)
 1. [Cat meow sounds as colored ACF](https://soundshader.github.io/cats)
+1. [The Lesser-Known Side of Discrete Cosine Transform](https://soundshader.github.io/pics/dct)
 
 # Questions or ideas?
 
