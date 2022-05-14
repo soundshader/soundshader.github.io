@@ -43,6 +43,7 @@ export class AudioController {
     this.rendererId = 0;
     this.renderers = [];
     this.waveform_fb = null;
+    this.pending_frames = 0;
   }
 
   init() {
@@ -61,10 +62,28 @@ export class AudioController {
   }
 
   initMouse() {
-    // this.mouseX = 0;
-    // this.mouseY = 0;
-
     if (!vargs.USE_MOUSE) return;
+    let initial_pos = null;
+
+    this.canvas.onmouseout = () => {
+      initial_pos = null;
+    };
+
+    this.canvas.onmousedown = e => {
+      initial_pos = { x: e.offsetX, y: e.offsetY };
+    };
+
+    this.canvas.onmouseup = e => {
+      if (!initial_pos) return;
+      if (this.pending_frames) return;
+      let t2 = this.canvasXtoT(e.offsetX);
+      let t1 = this.canvasXtoT(initial_pos.x);
+      let dt = (t1 - t2) | 0;
+      if (Math.abs(dt) < 1) return;
+      this.offsetMin += dt;
+      this.offsetMax += dt;
+      this.drawFrame();
+    };
 
     this.canvas.onmousemove = e => {
       if (e.offsetX < 0 || e.offsetX >= this.canvas.clientWidth) {
@@ -91,6 +110,17 @@ export class AudioController {
         this.offsetMax = t | 0;
         this.drawFrame();
       }
+    };
+
+    this.canvas.onmousewheel = e => {
+      if (this.pending_frames) return;
+      let zoom = 1.5 ** -Math.sign(e.wheelDelta);
+      let min = this.offsetMin;
+      let max = this.offsetMax;
+      let mid = (min + max) / 2, len = max - min;
+      this.offsetMin = (mid - len / 2 * zoom) | 0;
+      this.offsetMax = (mid + len / 2 * zoom) | 0;
+      this.drawFrame();
     };
   }
 
@@ -134,8 +164,10 @@ export class AudioController {
     let dt = (t_max - t_min) / ns;
 
     log.v('FFT step:', (t_max - t_min) / this.canvas.width / ns | 0);
+    this.pending_frames++;
 
     requestAnimationFrame(() => {
+      this.pending_frames--;
       for (let k = 0; k < ns; k++) {
         node.exec({
           uWaveFormFB: input,
@@ -157,7 +189,7 @@ export class AudioController {
     // N here has nothing to do with FFT size.
     let fb_size = 2048 ** 2 * 4;
     this.waveform_fb = new GpuFrameBuffer(this.webgl,
-      { size: (fb_size/4) ** 0.5, channels: 4 });
+      { size: (fb_size / 4) ** 0.5, channels: 4 });
 
     let encodedAudio = await audioFile.arrayBuffer();
     this.audioCtx = this.createAudioContext();
