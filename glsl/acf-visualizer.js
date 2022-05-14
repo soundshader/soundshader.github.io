@@ -359,7 +359,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
           float a = ${!!vargs.USE_DCT} ?
             abs(mod(arg/PI + 2.5, 2.0) - 1.0) :
             -0.25 + 0.5 * arg / PI;
-          return h_acf(vec2(a, r * 0.5));
+          return h_acf(vec2(r * 0.5, a));
         }
 
         vec4 fetch_rect() {
