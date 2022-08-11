@@ -18,17 +18,25 @@ export class GpuTransformProgram {
     this.glctx = glctx;
     width = width || size;
     height = height || size;
-    this.output = width * height && new GpuFrameBuffer(glctx, { width, height, channels });
+    this.output = width * height ? new GpuFrameBuffer(glctx, { width, height, channels }) : null;
     this.init({ vshader, fshader });
   }
 
+  destroy() {
+    this.output?.destroy();
+    this.program?.destroy();
+  }
+
   init({ vshader, fshader }) {
-    let glctx = this.glctx;
-    this.vertexShader = glctx.createVertexShader(vshader || vShaderCopy);
-    this.fragmentShader = glctx.createFragmentShader(fshader || fShaderCopy);
-    this.program = glctx.createProgram(
-      this.vertexShader,
-      this.fragmentShader);
+    let gl = this.glctx.gl;
+
+    let gl_vshader = GpuProgram.createShader(
+      gl, gl.VERTEX_SHADER, vshader || vShaderCopy);
+
+    let gl_fshader = GpuProgram.createShader(
+      gl, gl.FRAGMENT_SHADER, fshader || fShaderCopy);
+
+    this.program = new GpuProgram(gl, gl_vshader, gl_fshader);
   }
 
   exec(args = {}, output = this.output) {

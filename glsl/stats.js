@@ -2,8 +2,11 @@ import { GpuFrameBuffer } from "../webgl/framebuffer.js";
 import { GpuTransformProgram } from "../webgl/transform.js";
 
 // en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-// vec4 s = texture(uStats, vec2(0.0));
-// s.x = min, s.y = max, s.z = avg, s.w = stddev
+//
+//  vec4 s = texture(uStats, vec2(0.0));
+//  s.x = min, s.y = max, s.z = avg, s.w = stddev
+//
+// Input: NxNx1 texture. Must be a square.
 export class GpuStatsProgram extends GpuTransformProgram {
   constructor(webgl, { size }) {
     super(webgl, {
@@ -64,6 +67,7 @@ export class GpuStatsProgram extends GpuTransformProgram {
       `,
     });
 
+    this.size = size;
     this.mipmaps = [];
 
     for (let i = 0; 2 ** i < size; i++)
@@ -85,6 +89,7 @@ export class GpuStatsProgram extends GpuTransformProgram {
   }
 }
 
+// Same as the GpuStatsProgram, but for Nx1x1 inputs (i.e. height=1).
 export class GpuStatsFlat extends GpuTransformProgram {
   constructor(webgl, { width }) {
     super(webgl, {

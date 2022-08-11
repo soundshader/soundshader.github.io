@@ -1,12 +1,13 @@
 let q_args = new URLSearchParams(location.search);
+let args_info = [];
+
+export const args = () => console.log(args_info.join('\n'));
 
 // Dynamic args.
 
 export const H_TACF = h_strarg('tacf');
 
 // Static args.
-
-console.groupCollapsed('Config:');
 
 export const DEBUG = numarg('dbg', 0);
 export const FFT_SIZE = numarg('n', 2048); // 2048 is the max on Android
@@ -43,14 +44,12 @@ export const SHOW_LOGS = numarg('log', 0);
 export const FLOAT_PRECISION = strarg('fp', 'highp');
 export const INT_PRECISION = strarg('ip', 'highp');
 
-console.groupEnd();
-
 function strarg(name, defval = '', { regex, parse } = {}) {
   let value = q_args.get(name);
   if (value === null)
     value = defval;
   let info = '?' + name + '=' + value;
-  console.log(info);
+  args_info.push(info);
   if (regex && !regex.test(value))
     throw new Error(info + ' doesnt match ' + regex);
   if (parse)

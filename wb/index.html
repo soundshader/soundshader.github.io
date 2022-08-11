@@ -1,0 +1,28 @@
+<title>SSWB</title>
+<link rel="stylesheet"
+      href="styles.css">
+
+<div id="middle">
+  <div id="buttons">
+    <div id="btn-props" mode="layout">i</div>
+    <div id="btn-boxes" title="Add boxes" mode="layout">+</div>
+    <div id="btn-layout" title="Edit layout" mode="editor">G</div>
+    <div id="btn-shader" title="Edit shader" mode="editor">S</div>
+    <div id="btn-canvas" title="Show texture" mode="canvas">C</div>
+  </div>
+  <div id="controls"></div>
+  <div id="grid-wrapper" section="btn-props">
+    <textarea id="editor" spellcheck="false"></textarea>
+    <canvas></canvas>
+    <div id="grid"></div>
+  </div>
+</div>
+
+<div id="bottom">
+  <div id="status"></div>
+  <div id="error"></div>
+</div>
+
+<script src="../error.js"></script>
+<script src="index.js"
+        type="module"></script>

@@ -19,10 +19,20 @@ export class GpuProgram {
   constructor(gl, vertexShader, fragmentShader, nPoints) {
     this.gl = gl;
     this.uniforms = {};
+    this.vertexShader = vertexShader;
+    this.fragmentShader = fragmentShader;
     this.program = GpuProgram.createProgram(gl, vertexShader, fragmentShader);
     // uniforms[0] = {type:5,size:2,name:"uInput"}
     // uniforms["uInput"] = 32
     this.uniforms = this.getUniforms();
+  }
+
+  destroy() {
+    let gl = this.gl;
+    gl.deleteProgram(this.program);
+    gl.deleteShader(this.vertexShader);
+    gl.deleteShader(this.fragmentShader);
+    this.gl = null;
   }
 
   bind() {
@@ -47,10 +57,11 @@ export class GpuProgram {
 
   blit(output = null) {
     let gl = this.gl;
-    let w = output ? output.width : gl.drawingBufferWidth;
-    let h = output ? output.height : gl.drawingBufferHeight;
-    gl.viewport(0, 0, w, h);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, output ? output.fbo : null);
+    let w = output && output.width || gl.drawingBufferWidth;
+    let h = output && output.height || gl.drawingBufferHeight;
+    let vp = output && output.viewport || { x: 0, y: 0, w, h };
+    gl.viewport(vp.x, vp.y, vp.w, vp.h);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, output && output.fbo || null);
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0);
   }
 
@@ -74,16 +85,6 @@ export class GpuProgram {
         FSHADER_PREFACE,
       source,
     ].join('\n').trim();
-  }
-
-  static createFragmentShader(gl, source) {
-    return GpuProgram.createShader(
-      gl, gl.FRAGMENT_SHADER, source);
-  }
-
-  static createVertexShader(gl, source) {
-    return GpuProgram.createShader(
-      gl, gl.VERTEX_SHADER, source);
   }
 
   static createShader(gl, type, source) {

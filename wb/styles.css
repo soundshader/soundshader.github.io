@@ -1,0 +1,316 @@
+html, body {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  background: #010101;
+  font-family: monospace;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+@media screen and (orientation:portrait) {}
+
+@media screen and (orientation:landscape) {}
+
+#middle {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+}
+
+#buttons {
+  display: flex;
+  flex-direction: column;
+  width: 3em;
+  background: #120;
+  user-select: none;
+}
+
+#buttons>div {
+  cursor: pointer;
+  display: flex;
+  height: 3em;
+  color: #888;
+  justify-content: center;
+  align-items: center;
+}
+
+#buttons>div:hover {
+  color: #fff;
+}
+
+#buttons>div.selected {
+  border-left: 2px solid #fff;
+  color: #fff;
+}
+
+#controls {
+  display: flex;
+  flex-direction: column;
+  width: 16em;
+  color: #fff;
+  background: #444;
+}
+
+#controls>.header {
+  font-weight: bold;
+  padding: 0.5em;
+  padding-bottom: 0;
+}
+
+#controls .prop {
+  padding: 0.5em;
+  cursor: pointer;
+  user-select: none;
+}
+
+#controls .prop:focus {
+  outline: none;
+}
+
+#controls .prop.selected {
+  background: #004;
+  color: #fff;
+}
+
+#controls .prop.active {
+  border: 1px solid #ccc;
+}
+
+#controls .prop>.name {
+  font-weight: bold;
+  color: #cc0;
+}
+
+#controls .prop .val-res {
+  display: flex;
+  flex-direction: row;
+}
+
+#controls .prop .value {
+  flex: 1;
+}
+
+#controls .prop .result {
+  color: #888;
+}
+
+#controls>.info {
+  flex: 1;
+  font-style: italic;
+  padding: 0.5em;
+}
+
+#controls>.info textarea {
+  width: 100%;
+  height: 100%;
+  outline: none;
+  background: #000;
+  color: #fff;
+  font-size: 0.8em;
+}
+
+#controls>.info textarea:focus {
+  outline: none;
+}
+
+#controls>.button {
+  padding: 0.5em;
+  margin: 0.5em;
+  margin-top: 0;
+  cursor: pointer;
+  background: #002;
+  color: #ccc;
+  font-weight: bold;
+  text-align: center;
+}
+
+#controls>.button.disabled {
+  cursor: inherit;
+  color: #444;
+  background: #222;
+}
+
+#controls>.button:not(.disabled):hover {
+  background: #004;
+}
+
+#grid-wrapper {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+#editor {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  color: #fff;
+  background: #000;
+  padding: 1em;
+}
+
+#editor:focus {
+  outline: none;
+}
+
+#grid-wrapper:not([mode="editor"]) #editor {
+  display: none;
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+}
+
+textarea {
+  border: none;
+}
+
+#grid {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+#grid-wrapper[mode="layout"] #grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .1) 1px, transparent 1px);
+  background-size: 1em 1em, 1em 1em;
+}
+
+#grid-wrapper[mode="editor"] #grid {
+  display: none;
+}
+
+#grid-wrapper:not([mode="layout"]) .box {
+  display: none;
+}
+
+#grid-wrapper[mode="editor"] canvas {
+  display: none;
+}
+
+#grid[mode=dragging] {
+  user-select: none;
+}
+
+.box {
+  border: 1px solid #f00;
+  position: absolute;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.box.selected {
+  z-index: 1;
+}
+
+.box>.title {
+  padding: 0.5em;
+  background: #448;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.box>.content {
+  color: #fff;
+  padding: 0;
+  word-break: break-all;
+  white-space: pre;
+}
+
+.box>.resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1em;
+  height: 1em;
+}
+
+.box>.resize:before {
+  content: "";
+  display: block;
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border: 0.5em solid transparent;
+  border-right-color: green;
+  border-bottom-color: green;
+}
+
+.box.sgraph>.content {
+  white-space: normal;
+}
+
+.box.texture {
+  border-color: #840;
+}
+
+.box.texture>.title {
+  background: #840;
+}
+
+.box.shader {
+  border-color: #408;
+}
+
+.box.shader>.title {
+  background: #408;
+}
+
+.box.shader>.content {
+  padding: 0.5em;
+  font-size: 0.75rem;
+  background: #000;
+}
+
+.box.audio {
+  border-color: #028;
+}
+
+.box.audio>.title {
+  background: #028;
+}
+
+.box.audio>.content {
+  padding: 0.5em;
+}
+
+.box.selected {
+  border-color: #0f0;
+}
+
+#bottom {
+  display: flex;
+  flex-direction: row;
+  background: #224;
+  color: #fff;
+  padding: 0.5em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+#status {
+  color: #fff;
+  flex: 1;
+}
+
+#error {
+  color: #f00;
+  background: #000;
+  flex: 1;
+}
+
+#error:empty {
+  display: none;
+}

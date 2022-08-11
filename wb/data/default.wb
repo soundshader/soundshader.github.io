@@ -1,0 +1,17 @@
+VAR N = 1024
+
+BOX tex_audio = Texture(w=12 h=12 x=9 y=13 width=N height=N channels=4)
+BOX tex_frames = Texture(w=12 h=12 x=26 y=23 width=N height=N channels=1)
+BOX tex_hann = Texture(w=12 h=12 x=51 y=20 width=N height=N channels=1)
+BOX tex_stats = Texture(w=6 h=6 x=27 y=51 width=1 height=1 channels=4)
+BOX tex_fft = Texture(w=12 h=12 x=50 y=48 width=N height=N channels=2)
+BOX tex_sg = Texture(w=12 h=12 x=6 y=42 width=N height=N channels=4)
+BOX audio = AudioFile(w=12 h=8 x=6 y=4 output=tex_audio exts="audio%2Fmpeg%3B%20audio%2Fwav%3B%20audio%2Fwebm" sample_rate=41000 channel=0)
+BOX shader_frames = UserShader(w=12 h=12 x=12 y=27 output=tex_frames shader=framer.glsl uInput=tex_audio uOffsetMin=0 uOffsetMax=50000)
+BOX shader_hann = UserShader(w=12 h=12 x=34 y=8 output=tex_hann shader=hann.glsl uInput=tex_frames)
+BOX fft = DFTShader(w=12 h=12 x=48 y=34 output=tex_fft input=tex_hann layout=cols mode=dft)
+BOX stats = StatsShader(w=12 h=12 x=42 y=62 output=tex_stats input=tex_fft)
+BOX shader_log10 = UserShader(w=13 h=12 x=32 y=35 output=tex_sg shader=log10.glsl uInput=tex_fft uStats=tex_stats uLog10=3)
+BOX phase = UserShader(w=10 h=10 x=36 y=50 output=tex_sg shader=phase.glsl uInput=tex_fft uStats=tex_stats)
+
+SHADER phase.glsl = "uniform%20sampler2D%20uInput%3B%0Auniform%20sampler2D%20uStats%3B%0A%0Avec4%20eval%28)%20%7B%0A%20%20vec4%20s%20%3D%20texture%28uStats%2C%20vec2%280.0))%3B%0A%20%20vec2%20r%20%3D%20texture%28uInput%2C%20vTex).xy%3B%0A%20%20float%20a%20%3D%20atan%28r.y%2C%20r.x)%20%2F%203.1415926%3B%0A%20%20float%20q%20%3D%20length%28r)%20%2F%20s.y%20*%203.0%3B%0A%20%20return%20q%20*%20vec4%28max%280.0%2C%20a)%2C%200.0%2C%20max%280.0%2C%20-a)%2C%201.0)%3B%0A%7D"

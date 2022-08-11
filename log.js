@@ -1,15 +1,22 @@
 let lines = [];
+let onlog = null;
 
 export const v = (...args) => record('V', args);
 export const i = (...args) => record('I', args);
 export const w = (...args) => record('W', args);
 export const e = (...args) => record('E', args);
 
-export function assert(x) {
+export function assert(x, msg) {
   if (!x) {
     debugger;
-    throw new Error('assert: ' + x);
+    throw new Error(msg || 'assert: ' + x);
   }
+}
+
+export function addEventListener(e, fn) {
+  assert(e == 'log');
+  assert(!onlog);
+  onlog = fn;
 }
 
 export function setUnhandledErrorHandler(handler) {
@@ -45,4 +52,5 @@ function record(level, args) {
   level == 'I' && console.info(...args);
   level == 'W' && console.warn(...args);
   level == 'E' && console.error(...args);
+  onlog && onlog(level, ...args);
 }

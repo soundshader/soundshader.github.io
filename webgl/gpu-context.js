@@ -17,21 +17,6 @@ export class GpuContext {
     if (err) throw new Error('WebGL error code ' + err);
   }
 
-  createVertexShader(source) {
-    return GpuProgram.createVertexShader(this.gl, source);
-  }
-
-  createFragmentShader(source) {
-    return GpuProgram.createFragmentShader(this.gl, source);
-  }
-
-  createProgram(vertexShader, fragmentShader) {
-    return new GpuProgram(
-      this.gl,
-      vertexShader,
-      fragmentShader);
-  }
-
   createFrameBuffer(size, channels = 1) {
     return new GpuFrameBuffer(this, { size, channels });
   }
@@ -42,7 +27,7 @@ export class GpuContext {
         this.ext.formatRGBA;
   }
 
-  init() {
+  init(config = {}) {
     let canvas = this.canvas;
 
     let params = {
@@ -53,8 +38,11 @@ export class GpuContext {
       preserveDrawingBuffer: false,
     };
 
+    for (let s in config)
+      params[s] = config[s];
+
     log.i('Initializing WebGL');
-    log.v(params);
+    log.v(JSON.stringify(params));
 
     let gl = canvas.getContext('webgl2', params);
     if (!gl) throw new Error('WebGL 2.0 not available');
@@ -86,6 +74,14 @@ export class GpuContext {
     };
 
     this.initVertexBufferSquare();
+  }
+
+  clear(r = 0, g = 0, b = 0, a = 0) {
+    let gl = this.gl;
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    gl.clearColor(r, g, b, a);
+    gl.clear(gl.COLOR_BUFFER_BIT);
   }
 
   // 4 vertices, 2 triangles covering the -1 < x,y < +1 square.
