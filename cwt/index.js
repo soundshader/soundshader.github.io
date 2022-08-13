@@ -15,26 +15,63 @@ import { GpuFrameBuffer } from '../webgl/framebuffer.js';
 import { GpuTransformProgram } from '../webgl/transform.js';
 import { shaderUtils, complexMath } from '../glsl/basics.js';
 
-const SAMPLE_RATE = 48000;
-const FREQ_MIN = 20; // can't be zero
-const FREQ_MAX = 10000;
-const MAX_FB_SIZE = 256;
-const MAX_WAVEFORM_LEN = MAX_FB_SIZE ** 2;
-const WAVELET_SIZE = 80; // wavelengths
-const DOC_TITLE = document.title;
+const DEFAULT_CONFIG = `
+  // SAMPLE_RATE = 48000
+  // FREQ_MIN = 40
+  // FREQ_MAX = 12000
+  // TIME_MIN = 0
+  // TIME_MAX = 1.5
+  // AMP_MIN = -5
+  // AMP_MAX = 5
+  // FB_W = 256
+  // FB_H = 256
+  // IMG_W = 1024
+  // IMG_H = 1024
+
+  vec2 wavelet(float ts, float freq_hz) {
+    float width = 25.0 / freq_hz + 0.025;
+    float amp = 1.0 - hann_step(abs(float(ts)), 0.0, width * 0.5);
+    float phase = ts * freq_hz * PI * 2.0;
+    float re = cos(phase);
+    float im = sin(phase);
+    return amp / width * vec2(re, im);
+  }
+`;
+
+let conf = parseConfig(location.search ||
+  '?conf=' + encodeURIComponent(DEFAULT_CONFIG));
+
+const SAMPLE_RATE = conf.get('SAMPLE_RATE');
+const FREQ_MIN = conf.get('FREQ_MIN');
+const FREQ_MAX = conf.get('FREQ_MAX');
+const TIME_MIN = conf.get('TIME_MIN'); // sec
+const TIME_MAX = conf.get('TIME_MAX');
+const AMP_MIN = conf.get('AMP_MIN');
+const AMP_MAX = conf.get('AMP_MAX');
+const FB_W = conf.get('FB_W');
+const FB_H = conf.get('FB_H');
+const IMG_W = conf.get('IMG_W');
+const IMG_H = conf.get('IMG_H');
+const MAX_WAVEFORM_LEN = FB_W * FB_H; // FFT wraps around
+const WAVELET_SHADER = conf.get();
 
 const $ = s => document.querySelector(s);
 const sleep = dt => new Promise(resolve => setTimeout(resolve, dt));
-const hann = x => x > 0 && x < 1 ? Math.sin(Math.PI * x) ** 2 : 0;
 const mix = (min, max, x) => min * (1 - x) + max * x;
-const log2 = x => Math.log2(x);
 
-let audio_ctx, webgl, fft, sh_wavelet, sh_dot_product, sh_sampler, sh_draw;
+let audio_ctx, webgl, fft, sh_wavelet, sh_dot_product, sh_sample, sh_draw;
+let fb_audio, fb_audio_fft, fb_wavelet, fb_wavelet_fft, fb_conv, fb_conv_fft, fb_image1, fb_image2;
 let running = false;
 let canvas = $('canvas');
-canvas.width = 2048;
-canvas.height = 1024;
-canvas.onclick = () => updateImage();
+let btn_config = $('button#config');
+let btn_render = $('button#render');
+let btn_update = $('button#update');
+let textarea = $('textarea');
+
+btn_render.onclick = () => renderSpectrogram();
+btn_config.onclick = () => showConfig();
+btn_update.onclick = () => updateConfig();
+textarea.value = WAVELET_SHADER;
 
 function assert(x) {
   if (x) return;
@@ -42,38 +79,61 @@ function assert(x) {
   throw new Error('assert() failed');
 }
 
-async function init() {
+function showConfig() {
+  btn_render.remove();
+  btn_config.remove();
+  btn_update.style.display = '';
+  canvas.style.display = 'none';
+  textarea.style.display = '';
+  btn_update.style.display = '';
+}
+
+function updateConfig() {
+  location.search = '?conf=' + encodeURIComponent(textarea.value);
+}
+
+async function initGPU() {
   if (audio_ctx) return;
   audio_ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
 
+  canvas.width = IMG_W;
+  canvas.height = IMG_H;
   webgl = new GpuContext(canvas);
   await webgl.init();
 
-  fft = new GpuFFT(webgl, { width: MAX_FB_SIZE, height: MAX_FB_SIZE });
+  fft = new GpuFFT(webgl, { width: FB_W, height: FB_H });
+
+  fb_audio = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 1 });
+  fb_audio_fft = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
+  fb_wavelet = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
+  fb_wavelet_fft = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
+  fb_conv = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
+  fb_conv_fft = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
+  fb_image1 = new GpuFrameBuffer(webgl, { width: IMG_W, height: IMG_H, channels: 2 });
+  fb_image2 = new GpuFrameBuffer(webgl, { width: IMG_W, height: IMG_H, channels: 2 });
 
   sh_wavelet = new GpuTransformProgram(webgl, {
     fshader: `
       in vec2 vTex;
 
-      uniform float uWindowWidth;
-      uniform float uWavePeriod;
-      uniform int uTexSize;
+      const int W = ${FB_W};
+      const int H = ${FB_H};
+      const float WH = float(W * H);
+      const float SR = float(${SAMPLE_RATE});
+      const float PI = ${Math.PI};
+
+      uniform float uFreqHz;
 
       ${shaderUtils}
 
-      const float PI = ${Math.PI};
+      ${WAVELET_SHADER}
   
       void main() {
-        int uTexSize2 = uTexSize * uTexSize;
-        ivec2 vTexN = ivec2(vTex * float(uTexSize) - 0.5);
-        int x = vTexN.x + uTexSize * vTexN.y;
-        if (x > uTexSize2/2) x -= uTexSize2;
-
-        float amp = 1.0 - hann_step(abs(float(x)), 0.0, uWindowWidth * 0.5);
-        float t = float(x) / float(uWavePeriod) * PI * 2.0;
-        float re = cos(t);
-        float im = sin(t);
-        v_FragColor = amp * vec4(re, im, 0.0, 0.0);
+        ivec2 vTexN = ivec2(vTex * vec2(ivec2(W, H)) - 0.5);
+        float ts = float(vTexN.x + W * vTexN.y) / WH;
+        if (ts > 0.5) ts -= 1.0;
+        vec2 re_im = wavelet(ts * WH / SR, uFreqHz);
+        v_FragColor = vec4(re_im, 0.0, 0.0);
       }
     `
   });
@@ -90,22 +150,25 @@ async function init() {
       void main() {
         // The effect of multiplying by gaussian g is
         // the same as averaging spectrogram values.
-
-        float dx = 0.5 * min(vTex.x, 1.0 - vTex.x);
+        float dx = 0.1 * min(vTex.x, 1.0 - vTex.x);
         float g = exp(-dx*dx);
+
         vec2 u = texture(uInput1, vTex).xy;
         vec2 v = texture(uInput2, vTex).xy;
-        v_FragColor = g * vec4(imul(u, v), 0.0, 0.0);
+
+        v_FragColor = vec4(imul(u, v), 0.0, 0.0);
       }
     `
   });
 
-  sh_sampler = new GpuTransformProgram(webgl, {
+  sh_sample = new GpuTransformProgram(webgl, {
     fshader: `
       in vec2 vTex;
 
       uniform sampler2D uSignal;
       uniform sampler2D uImage;
+      uniform float uTimeMin;
+      uniform float uTimeMax;
       uniform int uOffsetY;
 
       void main() {
@@ -115,7 +178,8 @@ async function init() {
 
         int sw = sig_size.x;
         int sh = sig_size.y;
-        int i = int(vTex.x * float(sw * sh));
+        float t = mix(uTimeMin, uTimeMax, vTex.x);
+        int i = int(t * float(sw * sh));
         ivec2 sxy = ivec2(i % sw, i / sw);
         vec4 sig = texelFetch(uSignal, sxy, 0);
         vec4 img = texture(uImage, vTex);
@@ -129,96 +193,85 @@ async function init() {
       in vec2 vTex;
       uniform sampler2D uImage;
 
-      const vec3 RGB_0 = vec3(0.0);
-      const vec3 RGB_1 = vec3(0.8, 0.2, 0.0);
-      const vec3 RGB_2 = vec3(1.0, 0.8, 0.0);
+      const float A_MIN = float(${AMP_MIN});
+      const float A_MAX = float(${AMP_MAX});
 
-      vec3 log10_rgb(float r) {
-        float a = clamp(log(r)/log(10.0)/3.5 + 1.0, 0.0, 1.0);
-        return a < 0.5 ? mix(RGB_0, RGB_1, a * 2.0) :
-          mix(RGB_1, RGB_2, 2.0 * a - 1.0);
+      const vec3 RGB_0 = vec3(0.0, 0.0, 0.0); // 0.00 = black
+      const vec3 RGB_1 = vec3(0.1, 0.0, 0.1); // 0.25 = purple
+      const vec3 RGB_2 = vec3(0.3, 0.0, 0.0); // 0.50 = red
+      const vec3 RGB_3 = vec3(0.8, 0.6, 0.0); // 0.75 = yellow
+      const vec3 RGB_4 = vec3(1.0, 1.0, 1.0); // 1.00 = white
+
+      float log10_scaled(float x) {
+        float a = log(abs(x)) / log(10.0);
+        return (a - A_MIN) / (A_MAX - A_MIN);
+      }
+
+      vec3 flame_color(float a) {
+        float x = a * 4.0;
+        if (x < 1.0) return mix(RGB_0, RGB_1, x - 0.0);
+        if (x < 2.0) return mix(RGB_1, RGB_2, x - 1.0);
+        if (x < 3.0) return mix(RGB_2, RGB_3, x - 2.0);
+        if (x < 4.0) return mix(RGB_3, RGB_4, x - 3.0);
+        return vec3(1.0);
       }
 
       void main() {
         vec2 uv = texture(uImage, vTex).xy;
-        vec3 u = log10_rgb(abs(uv.x));
-        vec3 v = log10_rgb(abs(uv.y));
-        v_FragColor = vec4(u, 1.0);
+        vec3 rgb = flame_color(log10_scaled(dot(uv, uv)));
+        v_FragColor = vec4(rgb, 1.0);
       }
     `
   });
 }
 
-async function updateImage() {
+async function renderSpectrogram() {
   assert(!running);
   running = true;
-  await init();
+  await initGPU();
 
-  let w = canvas.width;
-  let h = canvas.height;
-  let file = await selectAudioFile();
+  let file = await openAudioFile();
   let buffer = await file.arrayBuffer();
   let waveform = await decodeAudioData(buffer);
 
-  waveform = waveform.slice(0, MAX_WAVEFORM_LEN);
-
-  let fb_audio = new GpuFrameBuffer(webgl, { width: MAX_FB_SIZE, height: MAX_FB_SIZE, channels: 1 });
-  let fb_audio_fft = new GpuFrameBuffer(webgl, { width: MAX_FB_SIZE, height: MAX_FB_SIZE, channels: 2 });
-  let fb_wavelet = new GpuFrameBuffer(webgl, { width: MAX_FB_SIZE, height: MAX_FB_SIZE, channels: 2 });
-  let fb_wavelet_fft = new GpuFrameBuffer(webgl, { width: MAX_FB_SIZE, height: MAX_FB_SIZE, channels: 2 });
-  let fb_conv = new GpuFrameBuffer(webgl, { width: MAX_FB_SIZE, height: MAX_FB_SIZE, channels: 2 });
-  let fb_conv_fft = new GpuFrameBuffer(webgl, { width: MAX_FB_SIZE, height: MAX_FB_SIZE, channels: 2 });
-  let fb_image1 = new GpuFrameBuffer(webgl, { width: w, height: h, channels: 2 });
-  let fb_image2 = new GpuFrameBuffer(webgl, { width: w, height: h, channels: 2 });
-
+  let ts_min = TIME_MIN * SAMPLE_RATE | 0;
+  let ts_max = Math.min(ts_min + MAX_WAVEFORM_LEN, TIME_MAX * SAMPLE_RATE | 0);
+  waveform = waveform.slice(ts_min, ts_max);
   log.i('Uploading audio data to GPU:', waveform.length, 'samples');
+  fb_audio.clear();
   fb_audio.upload(waveform);
 
   log.i('Computing FFT of the audio signal');
   fft.exec({ uInput: fb_audio }, fb_audio_fft);
 
+  log.i('Computing wavelet transform');
   let time = Date.now();
+  fb_image1.clear();
+  fb_image2.clear();
 
-  for (let y = 0; y < h; y++) {
-    let freq_hz = mix(FREQ_MIN, FREQ_MAX, y / (h - 1));
-    let wave_len = SAMPLE_RATE / freq_hz;
+  for (let y = 0; y < IMG_H; y++) {
+    let freq_hz = mix(FREQ_MIN, FREQ_MAX, y / (IMG_H - 1));
 
-    sh_wavelet.exec({
-      uTexSize: MAX_FB_SIZE,
-      uWindowWidth: wave_len * WAVELET_SIZE,
-      uWavePeriod: wave_len,
-    }, fb_wavelet);
-
+    sh_wavelet.exec({ uFreqHz: freq_hz }, fb_wavelet);
     fft.exec({ uInput: fb_wavelet }, fb_wavelet_fft);
     sh_dot_product.exec({ uInput1: fb_audio_fft, uInput2: fb_wavelet_fft }, fb_conv_fft);
     fft.exec({ uInput: fb_conv_fft, uInverseFFT: true }, fb_conv);
-    sh_sampler.exec({ uSignal: fb_conv, uImage: fb_image1, uOffsetY: y }, fb_image2);
+    sh_sample.exec({ uSignal: fb_conv, uImage: fb_image1, uOffsetY: y, uTimeMin: 0, uTimeMax: (ts_max - ts_min) / (FB_W * FB_H) }, fb_image2);
     [fb_image1, fb_image2] = [fb_image2, fb_image1];
 
-    if (time + 500 < Date.now()) {
-      time = Date.now();
+    if (time + 250 < Date.now()) {
       sh_draw.exec({ uImage: fb_image1 }, null);
-      document.title = (y / h * 100 | 0) + '% ' + freq_hz.toFixed(0) + ' Hz';
+      log.i((y / IMG_H * 100 | 0) + '% ' + freq_hz.toFixed(0) + ' Hz');
       await sleep(0);
+      time = Date.now();
     }
   }
 
   sh_draw.exec({ uImage: fb_image1 }, null);
-
-  fb_audio.destroy();
-  fb_audio_fft.destroy();
-  fb_wavelet.destroy();
-  fb_wavelet_fft.destroy();
-  fb_conv.destroy();
-  fb_conv_fft.destroy();
-  fb_image1.destroy();
-  fb_image2.destroy();
-
-  document.title = DOC_TITLE;
   running = false;
 }
 
-async function selectAudioFile() {
+async function openAudioFile() {
   log.v('Creating an <input> to pick a file');
   let input = document.createElement('input');
   input.type = 'file';
@@ -228,10 +281,12 @@ async function selectAudioFile() {
   let file = await new Promise((resolve, reject) => {
     input.onchange = () => {
       let files = input.files || [];
-      resolve(files[0] || null);
+      let file = files[0];
+      file ? resolve(file) : reject('No file selected');
     };
   });
 
+  log.i('Selected file:', file.name);
   return file;
 }
 
@@ -243,4 +298,23 @@ async function decodeAudioData(arrayBuffer) {
     'x', abuffer.sampleRate, 'Hz',
     abuffer.duration.toFixed(1), 'sec');
   return abuffer.getChannelData(0);
+}
+
+function parseConfig(query) {
+  let args = new URLSearchParams(query);
+  let conf = args.get('conf');
+  return {
+    get(name) {
+      if (!name)
+        return conf;
+      let regex = new RegExp('^\\s*//\\s*' + name + '\\s*=\\s*(\\S+)\\s*$', 'gm');
+      let match = regex.exec(conf);
+      if (!match)
+        throw new Error('Missing config param: ' + name);
+      let num = parseFloat(match[1]);
+      if (!Number.isFinite(num))
+        throw new Error('Invalid param value: ' + name + ' = ' + match[1]);
+      return num;
+    }
+  };
 }
