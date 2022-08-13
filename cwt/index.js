@@ -16,17 +16,18 @@ import { GpuTransformProgram } from '../webgl/transform.js';
 import { shaderUtils, complexMath } from '../glsl/basics.js';
 
 const DEFAULT_CONFIG = `
-  // SAMPLE_RATE = 48000
-  // FREQ_MIN = 40
-  // FREQ_MAX = 12000
-  // TIME_MIN = 0
-  // TIME_MAX = 1.5
-  // AMP_MIN = -5
-  // AMP_MAX = 5
-  // FB_W = 256
-  // FB_H = 256
-  // IMG_W = 1024
-  // IMG_H = 1024
+  const int SAMPLE_RATE = 48000;
+  const int FREQ_MIN = 40;
+  const int FREQ_MAX = 12000;
+  const float TIME_MIN = 0.0;
+  const float TIME_MAX = 1.5;
+  const float AMP_MIN = -5.0;
+  const float AMP_MAX = 5.0;
+  const int FB_W = 256;
+  const int FB_H = 256;
+  const int IMG_W = 1024;
+  const int IMG_H = 1024;
+  const float PI = radians(180.0);
 
   vec2 wavelet(float ts, float freq_hz) {
     float width = 25.0 / freq_hz + 0.025;
@@ -35,6 +36,12 @@ const DEFAULT_CONFIG = `
     float re = cos(phase);
     float im = sin(phase);
     return amp / width * vec2(re, im);
+  }
+
+  float brightness(vec2 re_im) {
+    float x = dot(re_im, re_im);
+    float a = log(abs(x)) / log(10.0);
+    return (a - AMP_MIN) / (AMP_MAX - AMP_MIN);
   }
 `;
 
@@ -46,12 +53,10 @@ const FREQ_MIN = conf.get('FREQ_MIN');
 const FREQ_MAX = conf.get('FREQ_MAX');
 const TIME_MIN = conf.get('TIME_MIN'); // sec
 const TIME_MAX = conf.get('TIME_MAX');
-const AMP_MIN = conf.get('AMP_MIN');
-const AMP_MAX = conf.get('AMP_MAX');
-const FB_W = conf.get('FB_W');
-const FB_H = conf.get('FB_H');
-const IMG_W = conf.get('IMG_W');
-const IMG_H = conf.get('IMG_H');
+const FB_W = conf.get('FB_W', 1, 4096);
+const FB_H = conf.get('FB_H', 1, 4096);
+const IMG_W = conf.get('IMG_W', 1, 4096);
+const IMG_H = conf.get('IMG_H', 1, 4096);
 const MAX_WAVEFORM_LEN = FB_W * FB_H; // FFT wraps around
 const WAVELET_SHADER = conf.get();
 
@@ -60,18 +65,21 @@ const sleep = dt => new Promise(resolve => setTimeout(resolve, dt));
 const mix = (min, max, x) => min * (1 - x) + max * x;
 
 let audio_ctx, webgl, fft, sh_wavelet, sh_dot_product, sh_sample, sh_draw;
-let fb_audio, fb_audio_fft, fb_wavelet, fb_wavelet_fft, fb_conv, fb_conv_fft, fb_image1, fb_image2;
-let running = false;
+let rendering = false;
 let canvas = $('canvas');
 let btn_config = $('button#config');
 let btn_render = $('button#render');
+let btn_abort = $('button#abort');
 let btn_update = $('button#update');
 let textarea = $('textarea');
 
 btn_render.onclick = () => renderSpectrogram();
+btn_abort.onclick = () => abortRendering();
 btn_config.onclick = () => showConfig();
 btn_update.onclick = () => updateConfig();
+
 textarea.value = WAVELET_SHADER;
+btn_abort.style.display = 'none';
 
 function assert(x) {
   if (x) return;
@@ -82,10 +90,18 @@ function assert(x) {
 function showConfig() {
   btn_render.remove();
   btn_config.remove();
+  btn_abort.remove();
   btn_update.style.display = '';
   canvas.style.display = 'none';
   textarea.style.display = '';
   btn_update.style.display = '';
+}
+
+function abortRendering() {
+  rendering = false;
+  btn_abort.style.display = 'none';
+  btn_render.style.display = '';
+  btn_config.style.display = '';
 }
 
 function updateConfig() {
@@ -103,15 +119,6 @@ async function initGPU() {
 
   fft = new GpuFFT(webgl, { width: FB_W, height: FB_H });
 
-  fb_audio = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 1 });
-  fb_audio_fft = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
-  fb_wavelet = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
-  fb_wavelet_fft = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
-  fb_conv = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
-  fb_conv_fft = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
-  fb_image1 = new GpuFrameBuffer(webgl, { width: IMG_W, height: IMG_H, channels: 2 });
-  fb_image2 = new GpuFrameBuffer(webgl, { width: IMG_W, height: IMG_H, channels: 2 });
-
   sh_wavelet = new GpuTransformProgram(webgl, {
     fshader: `
       in vec2 vTex;
@@ -120,7 +127,6 @@ async function initGPU() {
       const int H = ${FB_H};
       const float WH = float(W * H);
       const float SR = float(${SAMPLE_RATE});
-      const float PI = ${Math.PI};
 
       uniform float uFreqHz;
 
@@ -193,19 +199,15 @@ async function initGPU() {
       in vec2 vTex;
       uniform sampler2D uImage;
 
-      const float A_MIN = float(${AMP_MIN});
-      const float A_MAX = float(${AMP_MAX});
-
       const vec3 RGB_0 = vec3(0.0, 0.0, 0.0); // 0.00 = black
       const vec3 RGB_1 = vec3(0.1, 0.0, 0.1); // 0.25 = purple
       const vec3 RGB_2 = vec3(0.3, 0.0, 0.0); // 0.50 = red
       const vec3 RGB_3 = vec3(0.8, 0.6, 0.0); // 0.75 = yellow
       const vec3 RGB_4 = vec3(1.0, 1.0, 1.0); // 1.00 = white
 
-      float log10_scaled(float x) {
-        float a = log(abs(x)) / log(10.0);
-        return (a - A_MIN) / (A_MAX - A_MIN);
-      }
+      ${shaderUtils}
+
+      ${WAVELET_SHADER}
 
       vec3 flame_color(float a) {
         float x = a * 4.0;
@@ -217,22 +219,32 @@ async function initGPU() {
       }
 
       void main() {
-        vec2 uv = texture(uImage, vTex).xy;
-        vec3 rgb = flame_color(log10_scaled(dot(uv, uv)));
-        v_FragColor = vec4(rgb, 1.0);
+        vec2 w = texture(uImage, vTex).xy;
+        float a = brightness(w);
+        v_FragColor = vec4(flame_color(a), 1.0);
       }
     `
   });
 }
 
 async function renderSpectrogram() {
-  assert(!running);
-  running = true;
+  assert(!rendering);
+  rendering = true;
+  btn_render.style.display = 'none';
+  btn_config.style.display = 'none';
+  btn_abort.style.display = '';
   await initGPU();
 
   let file = await openAudioFile();
   let buffer = await file.arrayBuffer();
   let waveform = await decodeAudioData(buffer);
+
+  let fb_audio = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 1 });
+  let fb_audio_fft = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
+  let fb_wavelet = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
+  let fb_conv = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
+  let fb_image1 = new GpuFrameBuffer(webgl, { width: IMG_W, height: IMG_H, channels: 2 });
+  let fb_image2 = new GpuFrameBuffer(webgl, { width: IMG_W, height: IMG_H, channels: 2 });
 
   let ts_min = TIME_MIN * SAMPLE_RATE | 0;
   let ts_max = Math.min(ts_min + MAX_WAVEFORM_LEN, TIME_MAX * SAMPLE_RATE | 0);
@@ -249,13 +261,13 @@ async function renderSpectrogram() {
   fb_image1.clear();
   fb_image2.clear();
 
-  for (let y = 0; y < IMG_H; y++) {
+  for (let y = 0; y < IMG_H && rendering; y++) {
     let freq_hz = mix(FREQ_MIN, FREQ_MAX, y / (IMG_H - 1));
 
     sh_wavelet.exec({ uFreqHz: freq_hz }, fb_wavelet);
-    fft.exec({ uInput: fb_wavelet }, fb_wavelet_fft);
-    sh_dot_product.exec({ uInput1: fb_audio_fft, uInput2: fb_wavelet_fft }, fb_conv_fft);
-    fft.exec({ uInput: fb_conv_fft, uInverseFFT: true }, fb_conv);
+    fft.exec({ uInput: fb_wavelet }, fb_wavelet);
+    sh_dot_product.exec({ uInput1: fb_audio_fft, uInput2: fb_wavelet }, fb_conv);
+    fft.exec({ uInput: fb_conv, uInverseFFT: true }, fb_conv);
     sh_sample.exec({ uSignal: fb_conv, uImage: fb_image1, uOffsetY: y, uTimeMin: 0, uTimeMax: (ts_max - ts_min) / (FB_W * FB_H) }, fb_image2);
     [fb_image1, fb_image2] = [fb_image2, fb_image1];
 
@@ -268,7 +280,18 @@ async function renderSpectrogram() {
   }
 
   sh_draw.exec({ uImage: fb_image1 }, null);
-  running = false;
+
+  fb_audio.destroy();
+  fb_audio_fft.destroy();
+  fb_wavelet.destroy();
+  fb_conv.destroy();
+  fb_image1.destroy();
+  fb_image2.destroy();
+
+  rendering = false;
+  btn_render.style.display = '';
+  btn_config.style.display = '';
+  btn_abort.style.display = 'none';
 }
 
 async function openAudioFile() {
@@ -304,16 +327,18 @@ function parseConfig(query) {
   let args = new URLSearchParams(query);
   let conf = args.get('conf');
   return {
-    get(name) {
+    get(name, min, max) {
       if (!name)
         return conf;
-      let regex = new RegExp('^\\s*//\\s*' + name + '\\s*=\\s*(\\S+)\\s*$', 'gm');
-      let match = regex.exec(conf);
-      if (!match)
+      let regex = new RegExp('^\\s*const (int|float) ' + name + ' = (\\S+);\\s*$', 'gm');
+      let [, type, str_val] = regex.exec(conf) || [];
+      if (!type)
         throw new Error('Missing config param: ' + name);
-      let num = parseFloat(match[1]);
+      let num = parseFloat(str_val);
       if (!Number.isFinite(num))
-        throw new Error('Invalid param value: ' + name + ' = ' + match[1]);
+        throw new Error('Invalid param value: ' + name + ' = ' + str_val);
+      if (num < min || num > max)
+        throw new Error('Value out of range: ' + name + ' = ' + str_val + '; ' + min + '..' + max);
       return num;
     }
   };

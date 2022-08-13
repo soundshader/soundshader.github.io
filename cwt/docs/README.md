@@ -1,4 +1,4 @@
-# Continous Wavelet Transform with FFT
+# Continuous Wavelet Transform with FFT
 
 [soundshader.github.io/cwt](https://soundshader.github.io/cwt) renders wavelet spectrograms of audio files using a GPU version of FFT. The wavelet function is written in GLSL and can be edited in the UI. The default is a Morlet-like wavelet: instead of a gaussian, it uses the Hann window function.
 
@@ -27,9 +27,11 @@ All computations are performed on GPU. The audio signal is kept in a `256x256x1`
 S = conv(A, W) = iFFT(dot(FFT(A), FFT(W)))
 ```
 
-Below are two vowels, a violin and a singing bowl. Click images to see the large versions.
+Below are two vowels, a violin, a singing bowl and two birds. Click images to see the large versions.
 
 [![](p1.jpg)](v1.jpg)
 [![](p2.jpg)](v2.jpg)
 [![](p3.jpg)](v3.jpg)
 [![](p4.jpg)](v4.jpg)
+[![](p5.jpg)](v5.jpg)
+[![](p6.jpg)](v6.jpg)

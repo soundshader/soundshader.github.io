@@ -56,6 +56,12 @@ button#render {
   top: 0;
 }
 
+button#abort {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+}
+
 button#config {
   position: fixed;
   right: 0;
