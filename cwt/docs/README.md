@@ -27,8 +27,9 @@ All computations are performed on GPU. The audio signal is kept in a `256x256x1`
 S = conv(A, W) = iFFT(dot(FFT(A), FFT(W)))
 ```
 
-Below are two vowels. Click images to see the large versions.
+Below are two vowels, a violin and a singing bowl. Click images to see the large versions.
 
-[![](p1.png)](v1.png)
-[![](p2.png)](v2.png)
-
+[![](p1.jpg)](v1.jpg)
+[![](p2.jpg)](v2.jpg)
+[![](p3.jpg)](v3.jpg)
+[![](p4.jpg)](v4.jpg)
