@@ -43,6 +43,15 @@ const DEFAULT_CONFIG = `
     float a = log(abs(x)) / log(10.0);
     return (a - AMP_MIN) / (AMP_MAX - AMP_MIN);
   }
+
+  vec2 coords(vec2 vTex) {
+    return vTex;
+    vec2 v = vTex * 2.0 - 1.0;
+    float r = length(v);
+    float t = 1.0 - r;
+    float arg = atan2(v.y, v.x);
+    return vec2(-0.25 + 0.5 * arg / PI, 1.0 - abs(r / 0.75 - 1.0));
+  }
 `;
 
 let conf = parseConfig(location.search ||
@@ -219,7 +228,8 @@ async function initGPU() {
       }
 
       void main() {
-        vec2 w = texture(uImage, vTex).xy;
+        vec2 pos = coords(vTex);
+        vec2 w = texture(uImage, pos).xy;
         float a = brightness(w);
         v_FragColor = vec4(flame_color(a), 1.0);
       }
@@ -249,7 +259,8 @@ async function renderSpectrogram() {
   let ts_min = TIME_MIN * SAMPLE_RATE | 0;
   let ts_max = Math.min(ts_min + MAX_WAVEFORM_LEN, TIME_MAX * SAMPLE_RATE | 0);
   waveform = waveform.slice(ts_min, ts_max);
-  log.i('Uploading audio data to GPU:', waveform.length, 'samples');
+  log.i('Uploading audio data to GPU:', waveform.length, 'samples', 
+    (waveform.length / SAMPLE_RATE).toFixed(2), 'sec');
   fb_audio.clear();
   fb_audio.upload(waveform);
 
