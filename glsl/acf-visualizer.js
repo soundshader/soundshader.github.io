@@ -210,7 +210,7 @@ class GpuACF {
 
         const float N = float(${fft_size});
         const float SR = float(${vargs.SAMPLE_RATE});
-        const float A0 = float(${vargs.A4_FREQ / 2 ** 4});
+        const float RED_HZ = float(${vargs.A4_FREQ * 2 ** (4 / 12)});
 
         ${shaderUtils}
 
@@ -233,8 +233,8 @@ class GpuACF {
         void main() {
           float f = vTex.y * N - 0.5;
           float freq_hz = SR / N * (${!!vargs.USE_DCT} ? 0.5 * f : min(f, N - f));
-          float pitch = fract(log2(freq_hz / A0));
-          float val = hann_step(freq_hz / A0, 0.0, float(${vargs.ACF_MUTE_RANGE}));
+          float pitch = fract(log2(freq_hz / RED_HZ));
+          float val = hann_step(freq_hz / RED_HZ, 0.0, float(${vargs.ACF_MUTE_RANGE}));
           vec3 rgb = hann_hsv2rgb(vec3(pitch, 1.0, val));
 
           v_FragColor = texture(uFFT, vTex).x * vec4(rgb, 0.0);

@@ -4,6 +4,7 @@ html, body {
   padding: 0;
   margin: 0;
   background: #010101;
+  font-family: monospace;
 }
 
 body {
@@ -72,6 +73,26 @@ button#update {
   position: fixed;
   right: 0;
   bottom: 0;
+}
+
+.mark-v {
+  position: fixed;
+  z-index: 1;
+  border-top: 1px solid #080;
+  color: #080;
+  padding-top: 0.5em;
+  padding-left: 0.5em;
+  font-size: 0.75rem;
+}
+
+.mark-h {
+  position: fixed;
+  z-index: 1;
+  border-left: 1px solid #080;
+  color: #080;
+  padding-left: 0.5em;
+  padding-bottom: 0.5em;
+  font-size: 0.75rem;
 }
 
 #error:not(:empty) {

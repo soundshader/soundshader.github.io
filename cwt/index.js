@@ -27,6 +27,8 @@ const DEFAULT_CONFIG = `
   const int FB_H = 256;
   const int IMG_W = 1024;
   const int IMG_H = 1024;
+  const int FREQ_MARKERS = 10;
+  const int TIME_MARKERS = 10;
   const float PI = radians(180.0);
 
   vec2 wavelet(float ts, float freq_hz) {
@@ -66,7 +68,9 @@ const FB_W = conf.get('FB_W', 1, 4096);
 const FB_H = conf.get('FB_H', 1, 4096);
 const IMG_W = conf.get('IMG_W', 1, 4096);
 const IMG_H = conf.get('IMG_H', 1, 4096);
-const MAX_WAVEFORM_LEN = FB_W * FB_H; // FFT wraps around
+const FREQ_MARKERS = conf.get('FREQ_MARKERS', 0, 100);
+const TIME_MARKERS = conf.get('TIME_MARKERS', 0, 100);
+const MAX_WAVEFORM_LEN = FB_W * FB_H;
 const WAVELET_SHADER = conf.get();
 
 const $ = s => document.querySelector(s);
@@ -117,9 +121,12 @@ function updateConfig() {
   location.search = '?conf=' + encodeURIComponent(textarea.value);
 }
 
-async function initGPU() {
+async function initRenderer() {
   if (audio_ctx) return;
   audio_ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+
+  addFreqMarkers();
+  addTimeMarkers();
 
   canvas.width = IMG_W;
   canvas.height = IMG_H;
@@ -243,9 +250,11 @@ async function renderSpectrogram() {
   btn_render.style.display = 'none';
   btn_config.style.display = 'none';
   btn_abort.style.display = '';
-  await initGPU();
 
   let file = await openAudioFile();
+
+  await initRenderer();
+
   let buffer = await file.arrayBuffer();
   let waveform = await decodeAudioData(buffer);
 
@@ -303,6 +312,33 @@ async function renderSpectrogram() {
   btn_render.style.display = '';
   btn_config.style.display = '';
   btn_abort.style.display = 'none';
+}
+
+function addFreqMarkers(count = FREQ_MARKERS) {
+  for (let i = 1; i < count; i++) {
+    let freq_hz = mix(FREQ_MIN, FREQ_MAX, i / count);
+    let el = document.createElement('div');
+    el.className = 'mark-v';
+    el.style.top = ((1 - i / count) * 100).toFixed(1) + '%';
+    el.style.left = '0';
+    el.textContent = freq_hz.toFixed(0) + 'Hz';
+    document.body.appendChild(el);
+  }
+}
+
+function addTimeMarkers(count = TIME_MARKERS) {
+  let ts_min = TIME_MIN;
+  let ts_max = Math.min(TIME_MAX, ts_min + MAX_WAVEFORM_LEN / SAMPLE_RATE);
+
+  for (let i = 1; i < count; i++) {
+    let time_sec = mix(ts_min, ts_max, i / count);
+    let el = document.createElement('div');
+    el.className = 'mark-h';
+    el.style.left = ((i / count) * 100).toFixed(1) + '%';
+    el.style.bottom = '0';
+    el.textContent = time_sec.toFixed(2) + 's';
+    document.body.appendChild(el);
+  }
 }
 
 async function openAudioFile() {
