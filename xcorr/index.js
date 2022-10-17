@@ -32,11 +32,12 @@ function init() {
     console.log('Computing FFT image...');
     let fft_data = await computeFFT(audio, fft_size, num_frames);
     drawFFT(canvas, fft_data, { log_scale: 3 });
-    await sleep(0);
+    await sleep(500);
 
-    console.log('Computing xcorr FFT image...');
-    let xcorr_data = await computeXCorr(fft_data, fft_size, num_frames);
-    drawFFT(canvas, xcorr_data, { log_scale: 3 });
+    let fft_norm = normFFT(fft_data, fft_size, num_frames);
+    let fft_avg = averageFFT(fft_norm, fft_data, fft_size, num_frames);
+    let fft_diff = deltaFFT(fft_avg, fft_data, fft_size, num_frames);
+    drawFFT(canvas, fft_diff, { log_scale: 3 });
 
     console.log('Done');
   };
@@ -46,30 +47,42 @@ function init() {
   //   ':' + ((1 - e.clientY / canvas.clientHeight) * canvas.height | 0);
 }
 
-async function computeXCorr(fft_data, fft_size, num_frames,
-  { progress_dt = 1000 } = {}) {
-
+function normFFT(fft_data, fft_size, num_frames) {
   dcheck(fft_data.length == fft_size * num_frames);
-  let xcorr_data = new Float32Array(num_frames ** 2);
-  let ts = Date.now();
+  let fft_norm = new Float32Array(num_frames);
 
-  for (let t1 = 0; t1 < num_frames; t1++) {
-    for (let t2 = 0; t2 < num_frames; t2++) {
-      let f1 = fft_data.subarray(t1 * fft_size, (t1 + 1) * fft_size);
-      let f2 = fft_data.subarray(t2 * fft_size, (t2 + 1) * fft_size);
-      dcheck(f1.length == fft_size && f2.length == fft_size);
-      let sum = f1.reduce((s, _, i) => s + (f1[i] * f2[i]) ** 0.5, 0);
-      xcorr_data[t1 * num_frames + t2] = sum;
-    }
-
-    if (progress_dt > 0 && Date.now() > ts + progress_dt) {
-      console.log('Progress:', t1 / num_frames * 100 | 0, '%');
-      ts = Date.now();
-      await sleep(0);
-    }
+  for (let t = 0; t < num_frames; t++) {
+    let frame = fft_data.subarray(t * fft_size, (t + 1) * fft_size);
+    fft_norm[t] = frame.reduce((s, x) => s + x, 0.0);
   }
 
-  return xcorr_data;
+  return fft_norm;
+}
+
+function averageFFT(fft_norm, fft_data, fft_size, num_frames) {
+  dcheck(fft_data.length == fft_size * num_frames);
+  dcheck(fft_norm.length == num_frames);
+  let fft_avg = new Float32Array(fft_size);
+
+  for (let f = 0; f < fft_size; f++)
+    for (let t = 0; t < num_frames; t++)
+      if (fft_norm[t] > 0)
+        fft_avg[f] += fft_data[t * fft_size + f] / fft_norm[t] / num_frames;
+
+  return fft_avg;
+}
+
+function deltaFFT(fft_avg, fft_data, fft_size, num_frames) {
+  dcheck(fft_data.length == fft_size * num_frames);
+  dcheck(fft_avg.length == fft_size);
+
+  let fft_diff = new Float32Array(fft_data.length);
+
+  for (let t = 0; t < num_frames; t++)
+    for (let f = 0; f < fft_size; f++)
+      fft_diff[t * fft_size + f] = fft_data[t * fft_size + f] - fft_avg[f];
+
+  return fft_diff;
 }
 
 function drawFFT(canvas, fft, { log_scale = 0 } = {}) {
