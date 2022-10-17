@@ -1,4 +1,4 @@
-import { FFT } from '../audio/fft.js';
+import { FFT } from '../webfft.js';
 
 function assert(x, message) {
   if (!x) throw new Error(message || 'assertion failed');

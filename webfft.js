@@ -1,5 +1,6 @@
-import { GpuTransformProgram } from "../webgl/transform.js";
-import { GpuFrameBuffer } from "../webgl/framebuffer.js";
+// Standalone WebFFT library.
+
+import { GpuTransformProgram, GpuFrameBuffer } from "./webgl2.js";
 
 // Cooley-Tukey FFT algorithm.
 export class FFT {
@@ -651,5 +652,3 @@ export class GpuDCT {
     this.split_re_im.exec({ uInput: this.tex1 }, output);
   }
 }
-
-window.FFT = FFT;

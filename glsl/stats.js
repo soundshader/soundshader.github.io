@@ -1,5 +1,4 @@
-import { GpuFrameBuffer } from "../webgl/framebuffer.js";
-import { GpuTransformProgram } from "../webgl/transform.js";
+import { GpuTransformProgram, GpuFrameBuffer } from "../webgl2.js";
 
 // en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 //

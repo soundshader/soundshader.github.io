@@ -1,7 +1,6 @@
 import * as log from '../log.js';
-import { GpuDCT, GpuFFT } from '../audio/fft.js';
-import { GpuFrameBuffer } from '../webgl/framebuffer.js';
-import { GpuTransformProgram } from '../webgl/transform.js';
+import { GpuDCT, GpuFFT } from '../webfft.js';
+import { GpuTransformProgram, GpuFrameBuffer } from '../webgl2.js';
 import { GpuStatsProgram } from '../glsl/stats.js';
 
 // TODO:

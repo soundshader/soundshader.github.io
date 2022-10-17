@@ -1,5 +1,4 @@
-import { GpuTransformProgram } from "../webgl/transform.js";
-import { GpuFrameBuffer } from "../webgl/framebuffer.js";
+import { GpuTransformProgram, GpuFrameBuffer } from "../webgl2.js";
 
 class GpuDownsampler1x2 extends GpuTransformProgram {
   constructor(webgl) {

@@ -1,8 +1,7 @@
 import * as log from '../log.js';
 import * as vargs from "../url_args.js";
-import { GpuFFT, GpuDCT } from "../audio/fft.js";
-import { GpuFrameBuffer } from "../webgl/framebuffer.js";
-import { GpuTransformProgram } from "../webgl/transform.js";
+import { GpuFFT, GpuDCT } from "../webfft.js";
+import { GpuTransformProgram, GpuFrameBuffer } from "../webgl2.js";
 import { textureUtils, shaderUtils, colorUtils, complexMath } from "./basics.js";
 import { GpuDownsampler } from './downsampler.js';
 import { GpuStatsFlat } from './stats.js';

@@ -1,7 +1,6 @@
 import * as log from '../log.js';
 import * as vargs from '../url_args.js';
-import { GpuContext } from "../webgl/gpu-context.js";
-import { GpuFrameBuffer } from "../webgl/framebuffer.js";
+import { GpuFrameBuffer, GpuContext } from "../webgl2.js";
 import { GpuAcfVisualizerProgram } from '../glsl/acf-visualizer.js';
 
 export class AudioController {

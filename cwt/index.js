@@ -9,10 +9,8 @@
 // signal (65536, 1.6 sec of audio at 41 kHz).
 
 import * as log from '../log.js';
-import { GpuFFT } from '../audio/fft.js';
-import { GpuContext } from '../webgl/gpu-context.js';
-import { GpuFrameBuffer } from '../webgl/framebuffer.js';
-import { GpuTransformProgram } from '../webgl/transform.js';
+import { GpuFFT } from '../webfft.js';
+import { GpuContext, GpuTransformProgram, GpuFrameBuffer } from '../webgl2.js';
 import { shaderUtils, complexMath } from '../glsl/basics.js';
 
 const DEFAULT_CONFIG = `

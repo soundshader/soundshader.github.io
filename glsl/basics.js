@@ -1,25 +1,3 @@
-export const vShaderCopy = `
-  in vec2 aPosition;
-
-  out vec2 vTex; // 0..1
-  out vec2 v; // -1 .. +1
-
-  void main () {
-    v = aPosition;
-    vTex = v * 0.5 + 0.5;
-    gl_Position = vec4(v, 0.0, 1.0);
-  }
-`;
-
-export const fShaderCopy = `
-  in vec2 vTex;
-  uniform sampler2D uInput;
-
-  void main () {
-    v_FragColor = texture(uInput, vTex);
-  }
-`;
-
 export const colorUtils = `
   vec3 hsl2rgb(vec3 hsl) {
     // const float PI_2 = ${2 * Math.PI};

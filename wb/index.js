@@ -1,5 +1,5 @@
 import * as log from '../log.js';
-import { GpuContext } from "../webgl/gpu-context.js";
+import { GpuContext } from "../webgl2.js";
 import { GridUI } from './grid-ui.js';
 
 let $ = x => document.querySelector(x);
