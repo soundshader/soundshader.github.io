@@ -57,7 +57,7 @@ export class AudioController {
 
   canvasYtoF(offsetY) {
     let y = offsetY / this.canvas.clientHeight;
-    return vargs.SAMPLE_RATE / vargs.ZOOM * (1 - y);
+    return vargs.SAMPLE_RATE / 2 / vargs.ZOOM * (1 - y);
   }
 
   initMouse() {
@@ -90,8 +90,7 @@ export class AudioController {
       } else {
         let t = this.canvasXtoT(e.offsetX);
         let f = this.canvasYtoF(e.offsetY);
-        stats.textContent = 'T+' + (t / vargs.SAMPLE_RATE).toFixed(2)
-          + 's' + ' ' + f.toFixed(0) + ' Hz';
+        this.updateStats(t / vargs.SAMPLE_RATE, f);
       }
     };
 
@@ -121,6 +120,13 @@ export class AudioController {
       this.offsetMax = (mid + len / 2 * zoom) | 0;
       this.drawFrame();
     };
+  }
+
+  updateStats(ts, hz) {
+    let fn = this.audioFile.name;
+    let ts_hz = 'T+' + ts.toFixed(2)
+      + 's' + ' ' + hz.toFixed(0) + ' Hz';
+    this.stats.textContent = this.polarCoords ? fn : ts_hz + ' ' + fn;
   }
 
   initGpu() {
@@ -183,6 +189,8 @@ export class AudioController {
 
   async start(audioFile) {
     stop();
+    this.audioFile = audioFile;
+    this.updateStats(0, 0);
 
     // The audio wave is packed in a NxNx4 buffer.
     // N here has nothing to do with FFT size.

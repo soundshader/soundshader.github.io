@@ -15,6 +15,8 @@ let canvas = $('canvas');
 let audioController = null; // use getAudioController()
 let keyboardHandlers = {};
 let vTimeBarAnimationId = 0;
+let selectedFiles = [];
+let currentFileId = 0;
 
 let config = {
   size: vargs.FFT_SIZE,
@@ -128,10 +130,34 @@ function setMouseHandlers() {
   };
 
   btnUpload.onclick = async () => {
-    let controller = getAudioController();
-    let file = await selectAudioFile();
-    file && await controller.start(file);
+    selectedFiles = await selectAudioFiles();
+    currentFileId = 0;
+    renderCurrentFile();
   };
+
+  $('#prev').onclick = () => {
+    let n = selectedFiles.length;
+    let i = currentFileId;
+    currentFileId = (i - 1 + n) % n;
+    if (i != currentFileId)
+      renderCurrentFile();
+  };
+
+  $('#next').onclick = () => {
+    let n = selectedFiles.length;
+    let i = currentFileId;
+    currentFileId = (i + 1 + n) % n;
+    if (i != currentFileId)
+      renderCurrentFile();
+  };
+}
+
+function renderCurrentFile() {
+  let file = selectedFiles[currentFileId];
+  if (!file) return null;
+  log.v('current file:', file.name, file.size / 1024 | 0, 'KB');
+  let controller = getAudioController();
+  return controller.start(file);
 }
 
 function setKeyboardHandlers() {
@@ -202,21 +228,22 @@ function getAudioController() {
   return audioController;
 }
 
-async function selectAudioFile() {
+async function selectAudioFiles() {
   log.v('Creating an <input> to pick a file');
   let input = document.createElement('input');
   input.type = 'file';
-  input.accept = 'audio/mpeg; audio/wav; audio/webm';
+  input.accept = 'audio/*';
+  input.multiple = true;
   input.click();
 
-  let file = await new Promise((resolve, reject) => {
+  let files = await new Promise((resolve) => {
     input.onchange = () => {
-      let files = input.files || [];
-      resolve(files[0] || null);
+      resolve(input.files);
     };
   });
 
-  return file;
+  log.v('Selected files:', files.length);
+  return files;
 }
 
 function startUpdatingTimeBar() {

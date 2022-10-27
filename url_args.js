@@ -14,7 +14,7 @@ export const FFT_SIZE = numarg('n', 2048); // 2048 is the max on Android
 export const SHADER = strarg('s', 'acf');
 export const USE_DCT = numarg('dct', 0);
 export const A4_FREQ = numarg('a4', 432);
-export const SAMPLE_RATE = strarg('sr', 'A10', {
+export const SAMPLE_RATE = strarg('sr', '48000', {
   regex: /^A?\d+$/,
   parse: s => +s || 2 ** (s.slice(1) - 4) * A4_FREQ,
 });

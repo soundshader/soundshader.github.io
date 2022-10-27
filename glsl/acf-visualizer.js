@@ -353,7 +353,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
         vec4 fetch_disk() {
           float r = abs(length(v) - R0);
           if (r > 0.99) return vec4(0.0);
-          float t = 1.0 - r;
+          float t = r;
           float arg = atan2(v.y, v.x);
           float a = ${!!vargs.USE_DCT} ?
             abs(mod(arg/PI + 2.5, 2.0) - 1.0) :
