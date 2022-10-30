@@ -7,9 +7,8 @@ html, body, canvas {
 }
 
 canvas {
-  width: calc(100vw/5.1);
-  height: calc(100vw/5.1);
-  display: inline-block;
+  width: 150pt;
+  height: 150pt;
 }
 
 canvas.top {
