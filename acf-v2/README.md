@@ -1,6 +1,6 @@
 # Visual Morphology of Vowels
 
-Demo: [soundshader.github.io/acf-v2](https://soundshader.github.io/acf-v2)
+Demo: [soundshader.github.io/acf-v2](https://soundshader.github.io/acf-v2/demo)
 
 [![](img/xs.jpg)](img/xl.jpg)
 

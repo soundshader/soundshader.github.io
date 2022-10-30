@@ -7,7 +7,7 @@
 1. [Vowels and colored ACF](https://soundshader.github.io/vowels)
 1. [Cat meow sounds as colored ACF](https://soundshader.github.io/cats)
 1. [The Lesser-Known Side of Discrete Cosine Transform](https://soundshader.github.io/pics/dct)
-1. [Visual Morphology of Vowels](https://soundshader.github.io/acf-v2/README.md)
+1. [Visual Morphology of Vowels](https://soundshader.github.io/acf-v2)
 
 # License
 
