@@ -19,8 +19,8 @@ const DEFAULT_CONFIG = `
   const int FREQ_MAX = 12000;
   const float TIME_MIN = 0.0;
   const float TIME_MAX = 1.5;
-  const float AMP_MIN = -5.0;
-  const float AMP_MAX = 5.0;
+  const float AMP_MIN = -4.0;
+  const float AMP_MAX = 1.0;
   const int FB_W = 256;
   const int FB_H = 256;
   const int IMG_W = 1024;
@@ -41,11 +41,13 @@ const DEFAULT_CONFIG = `
   float brightness(vec2 re_im) {
     float x = dot(re_im, re_im);
     float a = log(abs(x)) / log(10.0);
-    return (a - AMP_MIN) / (AMP_MAX - AMP_MIN);
+    float b = (a - AMP_MIN) / (AMP_MAX - AMP_MIN);
+    return b;
   }
 
   vec2 coords(vec2 vTex) {
-    return vTex;
+    return vTex; // comment out to use polar coords
+
     vec2 v = vTex * 2.0 - 1.0;
     float r = length(v);
     float t = 1.0 - r;
@@ -54,22 +56,20 @@ const DEFAULT_CONFIG = `
   }
 `;
 
-let conf = parseConfig(location.search ||
-  '?conf=' + encodeURIComponent(DEFAULT_CONFIG));
-
-const SAMPLE_RATE = conf.get('SAMPLE_RATE');
-const FREQ_MIN = conf.get('FREQ_MIN');
-const FREQ_MAX = conf.get('FREQ_MAX');
-const TIME_MIN = conf.get('TIME_MIN'); // sec
-const TIME_MAX = conf.get('TIME_MAX');
-const FB_W = conf.get('FB_W', 1, 4096);
-const FB_H = conf.get('FB_H', 1, 4096);
-const IMG_W = conf.get('IMG_W', 1, 4096);
-const IMG_H = conf.get('IMG_H', 1, 4096);
-const FREQ_MARKERS = conf.get('FREQ_MARKERS', 0, 100);
-const TIME_MARKERS = conf.get('TIME_MARKERS', 0, 100);
+const CFG = parseConfig(localStorage.cwt_config || DEFAULT_CONFIG);
+const SAMPLE_RATE = CFG.get('SAMPLE_RATE');
+const FREQ_MIN = CFG.get('FREQ_MIN');
+const FREQ_MAX = CFG.get('FREQ_MAX');
+const TIME_MIN = CFG.get('TIME_MIN'); // sec
+const TIME_MAX = CFG.get('TIME_MAX');
+const FB_W = CFG.get('FB_W', 1, 4096);
+const FB_H = CFG.get('FB_H', 1, 4096);
+const IMG_W = CFG.get('IMG_W', 1, 4096);
+const IMG_H = CFG.get('IMG_H', 1, 4096);
+const FREQ_MARKERS = CFG.get('FREQ_MARKERS', 0, 100);
+const TIME_MARKERS = CFG.get('TIME_MARKERS', 0, 100);
 const MAX_WAVEFORM_LEN = FB_W * FB_H;
-const WAVELET_SHADER = conf.get();
+const WAVELET_SHADER = CFG.get();
 
 const $ = s => document.querySelector(s);
 const sleep = dt => new Promise(resolve => setTimeout(resolve, dt));
@@ -84,6 +84,7 @@ let btn_abort = $('button#abort');
 let btn_update = $('button#update');
 let textarea = $('textarea');
 
+window.onload = () => renderCachedSpectrogram();
 btn_render.onclick = () => renderSpectrogram();
 btn_abort.onclick = () => abortRendering();
 btn_config.onclick = () => showConfig();
@@ -108,6 +109,11 @@ function showConfig() {
   btn_update.style.display = '';
 }
 
+function updateConfig() {
+  localStorage.cwt_config = textarea.value;
+  location.reload();
+}
+
 function abortRendering() {
   rendering = false;
   btn_abort.style.display = 'none';
@@ -115,14 +121,7 @@ function abortRendering() {
   btn_config.style.display = '';
 }
 
-function updateConfig() {
-  location.search = '?conf=' + encodeURIComponent(textarea.value);
-}
-
-async function initRenderer() {
-  if (audio_ctx) return;
-  audio_ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
-
+async function initWebGL() {
   addFreqMarkers();
   addTimeMarkers();
 
@@ -216,8 +215,8 @@ async function initRenderer() {
       const vec3 RGB_0 = vec3(0.0, 0.0, 0.0); // 0.00 = black
       const vec3 RGB_1 = vec3(0.1, 0.0, 0.1); // 0.25 = purple
       const vec3 RGB_2 = vec3(0.3, 0.0, 0.0); // 0.50 = red
-      const vec3 RGB_3 = vec3(0.8, 0.6, 0.0); // 0.75 = yellow
-      const vec3 RGB_4 = vec3(1.0, 1.0, 1.0); // 1.00 = white
+      const vec3 RGB_3 = vec3(1.2, 0.6, 0.0); // 0.75 = yellow
+      const vec3 RGB_4 = vec3(1.5, 1.5, 1.5); // 1.00 = white
 
       ${shaderUtils}
 
@@ -242,19 +241,25 @@ async function initRenderer() {
   });
 }
 
-async function renderSpectrogram() {
+async function renderCachedSpectrogram() {
+  let waveform = loadWaveform();
+  return waveform && renderSpectrogram(waveform);
+}
+
+async function renderSpectrogram(waveform = null) {
   assert(!rendering);
   rendering = true;
   btn_render.style.display = 'none';
   btn_config.style.display = 'none';
   btn_abort.style.display = '';
 
-  let file = await openAudioFile();
+  if (!waveform) {
+    let file = await openAudioFile();
+    let buffer = await file.arrayBuffer();
+    waveform = await decodeAudioData(buffer);
+  }
 
-  await initRenderer();
-
-  let buffer = await file.arrayBuffer();
-  let waveform = await decodeAudioData(buffer);
+  await initWebGL();
 
   let fb_audio = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 1 });
   let fb_audio_fft = new GpuFrameBuffer(webgl, { width: FB_W, height: FB_H, channels: 2 });
@@ -266,8 +271,11 @@ async function renderSpectrogram() {
   let ts_min = TIME_MIN * SAMPLE_RATE | 0;
   let ts_max = Math.min(ts_min + MAX_WAVEFORM_LEN, TIME_MAX * SAMPLE_RATE | 0);
   waveform = waveform.slice(ts_min, ts_max);
-  log.i('Uploading audio data to GPU:', waveform.length, 'samples', 
+  log.i('Uploading audio data to GPU:', waveform.length, 'samples',
     (waveform.length / SAMPLE_RATE).toFixed(2), 'sec');
+
+  setTimeout(() => saveWaveform(waveform), 0);
+
   fb_audio.clear();
   fb_audio.upload(waveform);
 
@@ -292,7 +300,7 @@ async function renderSpectrogram() {
     if (time + 250 < Date.now()) {
       sh_draw.exec({ uImage: fb_image1 }, null);
       log.i((y / IMG_H * 100 | 0) + '% ' + freq_hz.toFixed(0) + ' Hz');
-      await sleep(0);
+      await sleep(50);
       time = Date.now();
     }
   }
@@ -360,6 +368,7 @@ async function openAudioFile() {
 
 async function decodeAudioData(arrayBuffer) {
   log.v('Decoding audio data...');
+  audio_ctx = audio_ctx || new AudioContext({ sampleRate: SAMPLE_RATE });
   let abuffer = await audio_ctx.decodeAudioData(arrayBuffer);
   log.i('Audio buffer:',
     abuffer.numberOfChannels, 'ch',
@@ -368,9 +377,7 @@ async function decodeAudioData(arrayBuffer) {
   return abuffer.getChannelData(0);
 }
 
-function parseConfig(query) {
-  let args = new URLSearchParams(query);
-  let conf = args.get('conf');
+function parseConfig(conf) {
   return {
     get(name, min, max) {
       if (!name)
@@ -387,4 +394,33 @@ function parseConfig(query) {
       return num;
     }
   };
+}
+
+function saveWaveform(waveform) {
+  try {
+    let ts = Date.now();
+    localStorage.audio = [...waveform]
+      .map(f => f * 2 ** 15 | 0)
+      .join(',')
+      .replace(/(0,){3,}/g, s => '0x' + s.length / 2 + ',');
+    log.i('Saved audio to local storage in', Date.now() - ts, 'ms;',
+      waveform.length, 'samples;', localStorage.audio.length, 'bytes');
+  } catch (err) {
+    log.i('Failed to save audio:', err.message);
+  }
+}
+
+function loadWaveform() {
+  if (localStorage.audio) {
+    let ts = Date.now();
+    let waveform = new Float32Array(
+      localStorage.audio
+        .replace(/(\d+)x(\d+),/g, (_, x, n) => (x + ',').repeat(+n))
+        .split(',')
+        .map(s => parseInt(s))
+        .map(i => i / 2 ** 15));
+    log.i('Loaded audio from local storage in', Date.now() - ts, 'ms;',
+      waveform.length, 'samples');
+    return waveform;
+  }
 }

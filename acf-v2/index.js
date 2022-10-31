@@ -7,12 +7,11 @@ const ACF = 1;
 let ts_min = 0.0;
 let ts_max = 1.5;
 let frame_size = 4096;
-let sample_rate = frame_size * 4;
-let num_frames_xs = 128;
+let sample_rate = 16000;
+let num_frames_xs = 256;
 let num_frames_xl = 2048;
 let audio_ctx = null;
 let sound_files = [];
-let sound_id = 0; // sound_files[sound_id - 1]
 let waveform = null;
 
 // These are files in the vowels/*.ogg list.
@@ -23,13 +22,13 @@ let sample_files = [
   'omcu', 'omfr', 'omfu', 'probr', 'profu', 'prombr', 'prombu'];
 
 let freq_color = hz => interpolate(hz, [
-  [0, [1, 0, 0]],
+  [0, [1, 0.1, 0]],
   [500, [4, 1, 0]],
   [1000, [4, 0, 1]],
   [2000, [0, 4, 1]],
   [3000, [0, 1, 4]],
-  [8000, [0, 0, 2]],
-  [12000, [0, 0, 1]],
+  [8000, [0, 1, 2]],
+  [12000, [1, 0, 1]],
 ]);
 
 let hann = (x, a = 0, b = 1) => x > a && x < b ? Math.sin(Math.PI * (x - a) / (b - a)) ** 2 : 0
@@ -42,7 +41,6 @@ async function main() {
   $('#load').onclick = async () => {
     $('#sounds').innerHTML = '';
     sound_files = await selectAudioFiles();
-    sound_id = 0;
     log('Selected files:', sound_files.length);
     await renderSoundFilesAsGrid();
     if (sound_files.length == 1)
@@ -53,7 +51,6 @@ async function main() {
     $('#init').onclick = null;
     $('#sounds').innerHTML = '';
     sound_files = [];
-    sound_id = 0;
     await downloadSamples();
     await renderSoundFilesAsGrid();
   };
@@ -64,7 +61,7 @@ async function main() {
 
   if (waveform) {
     let canvas = createCanvas();
-    await renderWaveform(canvas, waveform);
+    await renderWaveform(canvas, waveform, num_frames_xs);
   }
 }
 
@@ -97,6 +94,7 @@ function createCanvas(id = 0, nf = num_frames_xs) {
 }
 
 async function renderFullScreen(id) {
+  dcheck(!$('canvas.top'));
   let canvas = createCanvas(0, num_frames_xl);
   canvas.className = 'top';
   canvas.onclick = () => canvas.remove();
@@ -110,14 +108,14 @@ async function renderSoundFilesAsGrid() {
 
   for (let id = 0; id < num; id++) {
     let canvas = createCanvas(id + 1, num_frames_xs);
-    await renderSoundFile(id + 1, canvas);
+    await renderSoundFile(id + 1, canvas, num_frames_xs);
     await sleep(0);
   }
 
   log('Rendered all sounds');
 }
 
-async function renderSoundFile(id = sound_id, canvas) {
+async function renderSoundFile(id, canvas, num_frames) {
   let file = id > 0 && sound_files[id - 1];
 
   if (id > 0) {
@@ -127,22 +125,22 @@ async function renderSoundFile(id = sound_id, canvas) {
       ts_min * sample_rate | 0, ts_max * sample_rate | 0);
   }
 
-  await renderWaveform(canvas, waveform);
+  await renderWaveform(canvas, waveform, num_frames);
   file && renderSoundTag(canvas, file.name.replace(/\.\w+$/, ''));
 }
 
 function renderSoundTag(canvas, text) {
   let h = canvas.height;
-  let fs = h / 16 | 0;
+  let fs = h / 24 | 0;
   let ctx = canvas.getContext('2d');
   ctx.font = fs + 'px monospace';
-  ctx.fillStyle = '#444';
+  ctx.fillStyle = '#888';
   ctx.fillText(text, fs / 2, h - fs / 2);
 }
 
-async function renderWaveform(canvas, waveform) {
+async function renderWaveform(canvas, waveform, num_frames) {
   let trimmed = prepareWaveform(waveform);
-  await drawACF(canvas, trimmed, num_frames_xs, freq_color);
+  await drawACF(canvas, trimmed, num_frames, freq_color);
 }
 
 function prepareWaveform(waveform) {
@@ -230,7 +228,6 @@ async function drawACF(canvas, audio, num_frames, freq_color) {
 
     for (let f = 0; f < fs; f++) {
       let rgb = freq_color(sample_rate * Math.min(f, fs - f) / fs);
-
       for (let i = 0; i < 3; i++)
         acf_data[i][t * fs + f] = fft_frame[f] * rgb[i];
     }
@@ -265,17 +262,18 @@ async function drawFrames(ctx, rgb_data, num_frames) {
   let img = ctx.getImageData(0, 0, w, h);
   let fs = frame_size;
   let time = performance.now();
+  let t_min = 0, t_max = num_frames;
 
   ctx.clearRect(0, 0, w, h);
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      let t = y / h * num_frames | 0;
+      let t = mix(t_min, t_max, y / h) | 0;
       let f = (x / w + 0.5) * fs | 0;
 
       if (DISK) {
         let [r, a] = xy2ra(x / w * 2 - 1, y / h * 2 - 1);
-        t = (1 - r) * num_frames | 0;
+        t = mix(t_min, t_max, 1 - r) | 0;
         f = ((a / Math.PI + 1) / 2 + 0.75) * fs | 0;
         f = f * 2; // vertical symmetry
       }
