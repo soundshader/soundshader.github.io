@@ -87,6 +87,7 @@ export class GpuFrameBuffer {
     this.checkBufferSize();
     this.prepareFBO();
     this.clear();
+    this.webgl.framebuffers.push(this);
   }
 
   draw(x = 0, y = 0, w = 0, h = 0) {
@@ -102,6 +103,7 @@ export class GpuFrameBuffer {
   }
 
   destroy() {
+    if (!this.webgl) return;
     this.log?.v('Deleting texture', this.name);
     let gl = this.webgl.gl;
     gl.deleteTexture(this.texture);
@@ -235,16 +237,28 @@ export class GpuContext {
     this.ext = null;
     this.gl = null;
     this.log = log;
+
+    this.framebuffers = [];
+    this.programs = [];
+  }
+
+  destroy() {
+    if (!this.gl) return;
+    for (let fb of this.framebuffers)
+      fb.destroy();
+    for (let p of this.programs)
+      p.destroy();
+    this.gl = null;
+  }
+
+  createFrameBuffer(args) {
+    return new GpuFrameBuffer(this, args);
   }
 
   checkError() {
     if (!DEBUG) return;
     let err = this.gl.getError();
     if (err) throw new Error('WebGL error code ' + err);
-  }
-
-  createFrameBuffer(size, channels = 1) {
-    return new GpuFrameBuffer(this, { size, channels, log: this.log });
   }
 
   getTextureFormat(components) {
@@ -385,6 +399,7 @@ export class GpuProgram {
 
   destroy() {
     let gl = this.gl;
+    if (!gl) return;
     gl.deleteProgram(this.program);
     gl.deleteShader(this.vertexShader);
     gl.deleteShader(this.fragmentShader);
@@ -496,11 +511,14 @@ export class GpuTransformProgram {
       new GpuFrameBuffer(glctx, { width, height, channels, log }) :
       null;
     this.init({ vshader, fshader });
+    this.glctx.programs.push(this);
   }
 
   destroy() {
+    if (!this.glctx) return;
     this.output?.destroy();
     this.program?.destroy();
+    this.glctx = null;
   }
 
   init({ vshader, fshader }) {

@@ -15,6 +15,7 @@ export class GpuStatsProgram extends GpuTransformProgram {
         const int N = ${size}; // the top level texture size
 
         uniform sampler2D uData;
+        uniform vec4 uMask;
 
         int size() {
           return textureSize(uData, 0).x;
@@ -22,7 +23,9 @@ export class GpuStatsProgram extends GpuTransformProgram {
 
         vec4 fetch(vec2 v) {
           vec4 s = texture(uData, v);
-          return size() < N/2 ? s : vec4(s.xxx, 0.0);
+          if (size() < N/2) return s;
+          float d = dot(s, uMask);
+          return vec4(d, d, d, 0.0);
         }
 
         vec4 merge(vec4 p, vec4 q, float n) {
@@ -40,7 +43,6 @@ export class GpuStatsProgram extends GpuTransformProgram {
 
           // uData is 2x bigger than the output texture, so
           // vTex is precisely between the 4 uData pixels.
-          
 
           vec2 dx = vec2(1.0, 0.0) / float(n);
           vec2 dy = vec2(0.0, 1.0) / float(n);
@@ -58,9 +60,10 @@ export class GpuStatsProgram extends GpuTransformProgram {
 
         void main () {
           vec4 s = stats(vTex);
-          if (size() == 4)
+          if (size() == 4) {
             // m2 -> stddev
             s.w = sqrt(s.w) / float(N);
+          }
           v_FragColor = s;
         }
       `,
@@ -76,14 +79,14 @@ export class GpuStatsProgram extends GpuTransformProgram {
     this.output = this.mipmaps[0]; // 1x1x4
   }
 
-  exec({ uData }, output = this.output) {
+  exec({ uData, uMask = [1, 0, 0, 0] }, output = this.output) {
     let a = this.mipmaps;
     let n = a.length + 1;
 
     for (let i = 0; i < n - 1; i++) {
       let src = i == 0 ? uData : a[n - i - 1];
       let res = i == n - 2 ? output : a[n - i - 2];
-      super.exec({ uData: src }, res);
+      super.exec({ uData: src, uMask }, res);
     }
   }
 }

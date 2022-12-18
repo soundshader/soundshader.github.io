@@ -5,14 +5,15 @@ const DISK = 1;
 const ACF = 1;
 
 let ts_min = 0.0;
-let ts_max = 1.5;
+let ts_max = 15.0;
 let frame_size = 4096;
 let sample_rate = 16000;
 let num_frames_xs = 256;
-let num_frames_xl = 2048;
+let num_frames_xl = 1024;
 let audio_ctx = null;
 let sound_files = [];
 let waveform = null;
+let freq_colors = new Float32Array(4 * frame_size);
 
 // These are files in the vowels/*.ogg list.
 let sample_files = [
@@ -20,16 +21,6 @@ let sample_files = [
   'cmcr', 'cmcu', 'cmfr', 'cmfu', 'mcv', 'ncnbr', 'ncnfr',
   'ncnfu', 'nocu', 'nofu', 'obu', 'ocu', 'ofr', 'omcr',
   'omcu', 'omfr', 'omfu', 'probr', 'profu', 'prombr', 'prombu'];
-
-let freq_color = hz => interpolate(hz, [
-  [0, [1, 0.1, 0]],
-  [500, [4, 1, 0]],
-  [1000, [4, 0, 1]],
-  [2000, [0, 4, 1]],
-  [3000, [0, 1, 4]],
-  [8000, [0, 1, 2]],
-  [12000, [1, 0, 1]],
-]);
 
 let hann = (x, a = 0, b = 1) => x > a && x < b ? Math.sin(Math.PI * (x - a) / (b - a)) ** 2 : 0
 let hann_step = (x, a, b) => x < a ? 0 : x > b ? 1 : hann(0.5 * (x - a) / (b - a));
@@ -57,11 +48,26 @@ async function main() {
 
   $('#play').onclick = () => waveform && playSound(waveform);
 
+  initFreqColors();
   loadWaveform();
 
   if (waveform) {
     let canvas = createCanvas();
     await renderWaveform(canvas, waveform, num_frames_xs);
+  }
+}
+
+function initFreqColors() {
+  for (let i = 0; i < frame_size; i++) {
+    let f = Math.min(i, frame_size - i) / frame_size * 2; // 0..1
+    let r = hann(f, 0.0, 0.1) + hann(f, 0.3, 0.4);
+    let g = hann(f, 0.0, 0.3) + hann(f, 0.3, 0.6);
+    let b = hann(f, 0.0, 0.7) + hann(f, 0.3, 1.0);
+
+    freq_colors[4 * i + 0] = r;
+    freq_colors[4 * i + 1] = g;
+    freq_colors[4 * i + 2] = b;
+    freq_colors[4 * i + 3] = 1;
   }
 }
 
@@ -119,13 +125,17 @@ async function renderSoundFile(id, canvas, num_frames) {
   let file = id > 0 && sound_files[id - 1];
 
   if (id > 0) {
-    let buffer = await decodeAudioFile(file);
-    log('Decoded sound:', buffer.duration.toFixed(1), 'sec', '#' + id, '(' + file.name + ')');
-    waveform = buffer.getChannelData(0).subarray(
-      ts_min * sample_rate | 0, ts_max * sample_rate | 0);
+    try {
+      let buffer = await decodeAudioFile(file);
+      log('Decoded sound:', buffer.duration.toFixed(1), 'sec', '#' + id, '(' + file.name + ')');
+      waveform = buffer.getChannelData(0);
+    } catch (err) {
+      log(err.message);
+      waveform = new Float32Array(0);
+    }
   }
 
-  await renderWaveform(canvas, waveform, num_frames);
+  waveform && await renderWaveform(canvas, waveform, num_frames);
   file && renderSoundTag(canvas, file.name.replace(/\.\w+$/, ''));
 }
 
@@ -140,23 +150,24 @@ function renderSoundTag(canvas, text) {
 
 async function renderWaveform(canvas, waveform, num_frames) {
   let trimmed = prepareWaveform(waveform);
-  await drawACF(canvas, trimmed, num_frames, freq_color);
+  await drawACF(canvas, trimmed, num_frames);
 }
 
 function prepareWaveform(waveform) {
   let n = waveform.length, fs = frame_size;
+
+  // trim zeros at both ends
+  let i = 0, j = n - 1;
+  while (i < j && Math.abs(waveform[i]) < EPS) i++;
+  while (i < j && Math.abs(waveform[j]) < EPS) j--;
+  waveform = waveform.subarray(i, j + 1).subarray(
+    ts_min * sample_rate | 0, ts_max * sample_rate | 0);
+  n = waveform.length;
+
   // need some padding on both ends for smooth edges
-  let pad = fs / 2 | 0, r = 0.1;
+  let pad = fs / 2 | 0;
   let tmp = new Float32Array(n + 2 * pad);
   tmp.set(waveform, pad);
-
-  // for (let i = 1; i < tmp.length; i++)
-  //   tmp[i - 1] -= tmp[i];
-
-  // for (let i = 0; i < n; i++)
-  //   tmp[i + pad] *= Math.min(
-  //     hann_step(i / n, 0, r),
-  //     1 - hann_step(i / n, 1 - r, 1));
 
   return tmp;
 }
@@ -207,11 +218,11 @@ function playSound(sound, sr = sample_rate) {
   source.start();
 }
 
-async function drawACF(canvas, audio, num_frames, freq_color) {
+async function drawACF(canvas, audio, num_frames) {
   let fs = frame_size;
   let ctx = canvas.getContext('2d');
   let fft_data = new Float32Array(num_frames * fs);
-  let acf_data = [];
+  let acf_data = new Float32Array(4 * num_frames * fs);
 
   for (let t = 0; t < num_frames; t++) {
     let frame = new Float32Array(fs);
@@ -220,76 +231,75 @@ async function drawACF(canvas, audio, num_frames, freq_color) {
     fft_data.subarray(t * fs, (t + 1) * fs).set(frame);
   }
 
-  for (let i = 0; i < 3; i++)
-    acf_data[i] = new Float32Array(num_frames * fs);
-
   for (let t = 0; t < num_frames; t++) {
     let fft_frame = fft_data.subarray(t * fs, (t + 1) * fs);
 
-    for (let f = 0; f < fs; f++) {
-      let rgb = freq_color(sample_rate * Math.min(f, fs - f) / fs);
+    for (let f = 0; f < fs; f++)
       for (let i = 0; i < 3; i++)
-        acf_data[i][t * fs + f] = fft_frame[f] * rgb[i];
+        acf_data[t * fs + f + i * num_frames * fs] = fft_frame[f] * freq_colors[4 * f + i];
+
+    if (ACF) {
+      for (let i = 0; i < 3; i++) {
+        let acf_frame = acf_data
+          .subarray(i * num_frames * fs, (i + 1) * num_frames * fs)
+          .subarray(t * fs, (t + 1) * fs);
+        computeACF(acf_frame, acf_frame);
+      }
     }
-
-    for (let i = 0; i < 3 && ACF; i++) {
-      let acf_frame = acf_data[i].subarray(t * fs, (t + 1) * fs);
-      computeACF(acf_frame, acf_frame);
-    }
-  }
-
-  let abs_max = 0;
-
-  for (let i = 0; i < 3; i++) {
-    let plane = acf_data[i];
-    for (let j = 0; j < plane.length; j++)
-      plane[j] = Math.abs(plane[j]);
-    abs_max = Math.max(abs_max, max(plane));
-  }
-
-  for (let i = 0; i < 3; i++) {
-    let plane = acf_data[i];
-    for (let j = 0; j < plane.length; j++)
-      plane[j] *= 30 / abs_max;
   }
 
   await drawFrames(ctx, acf_data, num_frames);
 }
 
-async function drawFrames(ctx, rgb_data, num_frames) {
+async function drawFrames(ctx, rgba_data, num_frames) {
   let w = ctx.canvas.width;
   let h = ctx.canvas.height;
   let img = ctx.getImageData(0, 0, w, h);
   let fs = frame_size;
   let time = performance.now();
-  let t_min = 0, t_max = num_frames;
+  let abs_max = 0.08 * max(rgba_data);
 
-  ctx.clearRect(0, 0, w, h);
+  // for (let i = 0; i < num_frames * fs; i++)
+  //   abs_max = Math.max(abs_max, Math.abs(rgba_data[i * 4 + 3]));
 
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      let t = mix(t_min, t_max, y / h) | 0;
-      let f = (x / w + 0.5) * fs | 0;
+  // ctx.clearRect(0, 0, w, h);
 
-      if (DISK) {
+  let set_rgb = (x, y, r, g, b) => {
+    let i = (x + y * w) * 4;
+    img.data[i + 0] = 255 * Math.abs(r) / abs_max;
+    img.data[i + 1] = 255 * Math.abs(g) / abs_max;
+    img.data[i + 2] = 255 * Math.abs(b) / abs_max;
+    img.data[i + 3] = 255;
+  };
+
+  for (let y = 0; y < h / 2; y++) {
+    for (let x = 0; x < w / 2; x++) {
+      let t, f;
+
+      if (!DISK) {
+        t = Math.abs(y / h * 2 - 1) * num_frames | 0;
+        f = (x / w + 0.5) * fs | 0;
+        t = clamp(t, 0, num_frames - 1);
+      } else {
         let [r, a] = xy2ra(x / w * 2 - 1, y / h * 2 - 1);
-        t = mix(t_min, t_max, 1 - r) | 0;
-        f = ((a / Math.PI + 1) / 2 + 0.75) * fs | 0;
+        if (r >= 1) continue;
+        t = Math.min(num_frames - 1, r * num_frames | 0);
+        f = ((a / Math.PI + 1) / 2 + 0.75) * fs;
         f = f * 2; // vertical symmetry
       }
 
-      t = num_frames - 1 - t;
-      f = f % fs;
+      let f_width = DISK ? num_frames / (t + 1) : 0;
 
-      let r = rgb_data[0][t * fs + f];
-      let g = rgb_data[1][t * fs + f];
-      let b = rgb_data[2][t * fs + f];
+      let r = getRgbaSmoothAvg(rgba_data, 0, t, f, f_width, num_frames);
+      let g = getRgbaSmoothAvg(rgba_data, 1, t, f, f_width, num_frames);
+      let b = getRgbaSmoothAvg(rgba_data, 2, t, f, f_width, num_frames);
 
-      let i = (x + y * w) * 4;
-      img.data[i + 0] = 255 * r;
-      img.data[i + 1] = 255 * g;
-      img.data[i + 2] = 255 * b;
-      img.data[i + 3] = 255;
+      // [r, g, b] = mv3x3_mul([16, 4, 1, 4, 16, 4, 4, 1, 16], [r, g, b]);
+
+      set_rgb(x, y, r, g, b);
+      set_rgb(w - x - 1, y, r, g, b);
+      set_rgb(x, h - y - 1, r, g, b);
+      set_rgb(w - x - 1, h - y - 1, r, g, b);
     }
 
     if (performance.now() > time + 250) {
@@ -301,6 +311,41 @@ async function drawFrames(ctx, rgb_data, num_frames) {
 
   ctx.putImageData(img, 0, 0);
   await sleep(0);
+}
+
+// f doesn't have to be an integer
+function getRgbaSmoothAvg(rgba_data, rgba_idx, t, f, f_width, num_frames) {
+  dcheck(rgba_idx >= 0 && rgba_idx <= 3);
+  dcheck(t >= 0 && t < num_frames);
+  dcheck(f_width >= 0 && f_width <= frame_size);
+  dcheck(rgba_data.length == num_frames * frame_size * 4);
+
+  let fs = frame_size;
+  let nf = num_frames;
+  let base = rgba_idx * nf * fs + t * fs;
+  let frame = rgba_data.subarray(base, base + frame_size);
+
+  return !f_width ?
+    frame[((f | 0) % fs + fs) % fs] :
+    getSmoothAvg(frame, f, f_width);
+}
+
+// f doesn't have to be an integer
+function getSmoothAvg(frame, f, f_width) {
+  let fs = frame.length;
+  let f_min = Math.floor(f - f_width);
+  let f_max = Math.ceil(f + f_width);
+  let sum = 0, w_sum = 0;
+
+  dcheck(f_width >= 1 && f_width <= fs);
+
+  for (let i = f_min; i <= f_max; i++) {
+    let w = hann(i, f - f_width, f + f_width);
+    sum += w * frame[(i % fs + fs) % fs];
+    w_sum += w;
+  }
+
+  return sum / w_sum;
 }
 
 function readAudioFrame(audio, num_frames, frame_id, frame) {
@@ -332,9 +377,9 @@ function computeACF(input, output) {
   dcheck(input.length == output.length);
   let temp = FFT.expand(input);
   let temp2 = FFT.forward(temp);
-  dcheck(is_real(temp));
+  // dcheck(is_real(temp2));
   FFT.abs(temp2, output);
-  dcheck(is_even(output));
+  // dcheck(is_even(output));
 }
 
 function dcheck(x) {
@@ -410,6 +455,15 @@ function xy2ra(x, y) {
   let r = Math.sqrt(x * x + y * y);
   let a = Math.atan2(y, x); // -PI..PI
   return [r, a]
+}
+
+function mv3x3_mul(m, v) {
+  dcheck(v.length == 3 && m.length == 9);
+  return [
+    v[0] * m[0] + v[1] * m[3] + v[2] * m[6],
+    v[0] * m[1] + v[1] * m[4] + v[2] * m[7],
+    v[0] * m[2] + v[1] * m[5] + v[2] * m[8],
+  ];
 }
 
 function $(s) {

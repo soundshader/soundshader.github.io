@@ -193,11 +193,8 @@ export class AudioController {
     this.updateStats(0, 0);
 
     // The audio wave is packed in a NxNx4 buffer.
-    // N here has nothing to do with FFT size.
+    // N here has nothing to do with the FFT size.
     let fb_size = 2048 ** 2 * 4;
-    this.waveform_fb = new GpuFrameBuffer(this.webgl,
-      { size: (fb_size / 4) ** 0.5, channels: 4 });
-
     let encodedAudio = await audioFile.arrayBuffer();
     this.audioCtx = this.createAudioContext();
     this.destNode = this.audioCtx.createMediaStreamDestination();
@@ -208,13 +205,15 @@ export class AudioController {
     this.audioSamples = new Float32Array(this.audioBuffer.getChannelData(0));
     this.audioSamples = this.fixAudioBufferRate(this.audioSamples);
 
-    if (this.audioSamples.length > fb_size)
+    if (this.audioSamples.length > fb_size) {
       this.audioSamples = this.audioSamples.slice(0, fb_size);
-
-    // TODO: Add N/2 zeros on the left and on the right.
+      log.i('Truncated audio to', fb_size, 'samples');
+    }
 
     this.offsetMin = 0;
     this.offsetMax = this.audioSamples.length;
+    this.waveform_fb = new GpuFrameBuffer(this.webgl,
+      { size: (fb_size / 4) ** 0.5, channels: 4 });
     this.waveform_fb.upload(this.audioSamples); // send to GPU
 
     log.i('Decoded sound:', this.audioBuffer.duration.toFixed(1), 'sec',

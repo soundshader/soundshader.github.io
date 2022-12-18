@@ -7,8 +7,8 @@ html, body, canvas {
 }
 
 canvas {
-  width: 150pt;
-  height: 150pt;
+  width: 100pt;
+  height: 100pt;
 }
 
 canvas.top {

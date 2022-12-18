@@ -10,14 +10,11 @@ export const H_TACF = h_strarg('tacf');
 // Static args.
 
 export const DEBUG = numarg('dbg', 0);
-export const FFT_SIZE = numarg('n', 2048); // 2048 is the max on Android
+export const FFT_SIZE = numarg('fft', 2048); // 2048 is the max on Android
 export const SHADER = strarg('s', 'acf');
 export const USE_DCT = numarg('dct', 0);
 export const A4_FREQ = numarg('a4', 432);
-export const SAMPLE_RATE = strarg('sr', '48000', {
-  regex: /^A?\d+$/,
-  parse: s => +s || 2 ** (s.slice(1) - 4) * A4_FREQ,
-});
+export const SAMPLE_RATE = strarg('sr', '48000');
 export const IMAGE_SIZE = numarg('img', 2048);
 export const USE_MOUSE = numarg('mouse', 1);
 export const HANN_WINDOW = numarg('hann', 1);
