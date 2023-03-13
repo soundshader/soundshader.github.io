@@ -3,6 +3,8 @@ import * as vargs from '../url_args.js';
 import { GpuFrameBuffer, GpuContext } from "../webgl2.js";
 import { GpuAcfVisualizerProgram } from '../glsl/acf-visualizer.js';
 
+const vconf = vargs.vconf;
+
 export class AudioController {
   get audioStream() {
     return this.destNode.stream;
@@ -57,7 +59,7 @@ export class AudioController {
 
   canvasYtoF(offsetY) {
     let y = offsetY / this.canvas.clientHeight;
-    return vargs.SAMPLE_RATE / 2 / vargs.ZOOM * (1 - y);
+    return vconf.SAMPLE_RATE / 2 / vargs.ZOOM * (1 - y);
   }
 
   initMouse() {
@@ -90,7 +92,7 @@ export class AudioController {
       } else {
         let t = this.canvasXtoT(e.offsetX);
         let f = this.canvasYtoF(e.offsetY);
-        this.updateStats(t / vargs.SAMPLE_RATE, f);
+        this.updateStats(t / vconf.SAMPLE_RATE, f);
       }
     };
 
@@ -165,7 +167,7 @@ export class AudioController {
     let ctx2d = this.canvas.getContext('2d');
     let w = this.canvas.width;
     let h = this.canvas.height;
-    let ns = vargs.NUM_STRIPES;
+    let ns = vconf.NUM_STRIPES;
     let dt = (t_max - t_min) / ns;
 
     log.v('FFT step:', (t_max - t_min) / this.canvas.width / ns | 0);
@@ -237,7 +239,7 @@ export class AudioController {
 
     let audioCtx = this.audioCtx;
     let src_sr = this.audioCtx.sampleRate;
-    let res_sr = vargs.SAMPLE_RATE;
+    let res_sr = vconf.SAMPLE_RATE;
     let n_sr = 2 ** (Math.log2(src_sr / res_sr) | 0);
     let t_min = this.offsetMin * n_sr;
     let t_max = this.offsetMax * n_sr;
@@ -276,11 +278,13 @@ export class AudioController {
     await this.playAudioPromise;
     this.activeAudio = null;
     this.playAudioPromise = null;
+    this.audioCtx?.close();
+    this.audioCtx = null;
   }
 
   createAudioContext() {
     // AudioContext doesn't support too low sample rates.
-    for (let sr = vargs.SAMPLE_RATE | 0; ; sr *= 2) {
+    for (let sr = vconf.SAMPLE_RATE | 0; ; sr *= 2) {
       try {
         return new AudioContext({ sampleRate: sr });
       } catch (e) {
@@ -295,7 +299,7 @@ export class AudioController {
 
   fixAudioBufferRate(a) {
     let src_sr = this.audioCtx.sampleRate;
-    let res_sr = vargs.SAMPLE_RATE;
+    let res_sr = vconf.SAMPLE_RATE;
     let n = Math.log2(src_sr / res_sr);
     if (n < 1) return a;
 

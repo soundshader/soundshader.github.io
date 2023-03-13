@@ -7,6 +7,7 @@ const SHADER_PREFACE = `
   #version 300 es
   precision highp float;
   precision highp int;
+  precision highp sampler2D;
 `;
 
 const VSHADER_PREFACE = `
@@ -20,13 +21,15 @@ const FSHADER_PREFACE = `
 const VSHADER_DEFAULT = `
   in vec2 aPosition;
 
-  out vec2 vTex; // 0..1
-  out vec2 v; // -1 .. +1
+  out vec2 vTex; // 0..1 x 0..1
+  out vec2 vPos; // -1..1 x -1..1
+  out vec2 v;
 
   void main () {
     v = aPosition;
-    vTex = v * 0.5 + 0.5;
-    gl_Position = vec4(v, 0.0, 1.0);
+    vPos = aPosition;
+    vTex = vPos * 0.5 + 0.5;
+    gl_Position = vec4(vPos, 0.0, 1.0);
   }
 `;
 
@@ -120,6 +123,8 @@ export class GpuFrameBuffer {
       throw new Error('Invalid CPU buffer length: ' + output.length);
 
     let gl = this.webgl.gl;
+
+    // gl.finish(); // TODO: flush pending GPU ops
 
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.fbo);
     gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
@@ -240,6 +245,7 @@ export class GpuContext {
 
     this.framebuffers = [];
     this.programs = [];
+    this.num_points = 0;
   }
 
   destroy() {
@@ -252,7 +258,11 @@ export class GpuContext {
   }
 
   createFrameBuffer(args) {
-    return new GpuFrameBuffer(this, args);
+    return new GpuFrameBuffer(this, { log: this.log, ...args });
+  }
+
+  createTransformProgram(args) {
+    return new GpuTransformProgram(this, { log: this.log, ...args });
   }
 
   checkError() {
@@ -288,11 +298,17 @@ export class GpuContext {
     if (!gl) throw new Error('WebGL 2.0 not available');
     this.log?.i('WebGL v' + gl.VERSION);
 
+    this.log?.i('Texture access in vertex shaders:',
+      gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS));
+    this.log?.i('Max gl_PointSize:',
+      gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE));
+
     let fsprec = (fp) => gl.getShaderPrecisionFormat(
       gl.FRAGMENT_SHADER, fp).precision;
     this.log?.i('Shader precision:',
-      [gl.HIGH_FLOAT, gl.MEDIUM_FLOAT, gl.LOW_FLOAT].map(fsprec).join(', '));
-    this.log?.i('Chosen precision:', 'float=highp', 'int=highp');
+      'highp=' + fsprec(gl.HIGH_FLOAT),
+      'mediump=' + fsprec(gl.MEDIUM_FLOAT),
+      'lowp=' + fsprec(gl.LOW_FLOAT));
 
     gl.getExtension('EXT_color_buffer_float');
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -322,27 +338,34 @@ export class GpuContext {
     gl.clear(gl.COLOR_BUFFER_BIT);
   }
 
-  // 4 vertices, 2 triangles covering the -1 < x,y < +1 square.
-  initVertexBufferSquare() {
-    let vertices = new Float32Array([
-      -1, -1, // LB
-      -1, +1, // LT
-      +1, +1, // RT
-      +1, -1, // RB
-    ]);
+  initVertexBufferSquare(num = 1) {
+    // The [-1, 1] x [-1, 1] area is split into NxN squares,
+    // each square made of 2 triangles.
+    let vertices = [];
+    let elements = [];
 
-    let vindexes = new Uint32Array([
-      0, 1, 2, // LB-LT-RT
-      0, 2, 3, // LB-RT-RB
-    ]);
+    for (let i = 0; i <= num; i++)
+      for (let j = 0; j <= num; j++)
+        vertices.push(i / num * 2 - 1, j / num * 2 - 1);
+
+    for (let i = 0; i < num; i++) {
+      for (let j = 0; j < num; j++) {
+        // a c
+        // b d
+        let a = i * (num + 1) + j, b = a + 1, c = a + num + 1, d = c + 1;
+        elements.push(b, a, c, b, c, d);
+      }
+    }
+
+    this.num_points = elements.length;
 
     let gl = this.gl;
 
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, vindexes, gl.STATIC_DRAW);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(elements), gl.STATIC_DRAW);
 
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(0);
@@ -381,17 +404,20 @@ export class GpuContext {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
 
     const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    gl.deleteTexture(texture);
+    gl.deleteFramebuffer(fbo);
     return status == gl.FRAMEBUFFER_COMPLETE;
   }
 }
 
 export class GpuProgram {
-  constructor(gl, vertexShader, fragmentShader) {
-    this.gl = gl;
+  constructor(webgl, vertexShader, fragmentShader) {
+    this.gl = webgl.gl;
+    this.webgl = webgl;
     this.uniforms = {};
     this.vertexShader = vertexShader;
     this.fragmentShader = fragmentShader;
-    this.program = GpuProgram.createProgram(gl, vertexShader, fragmentShader);
+    this.program = GpuProgram.createProgram(this.gl, vertexShader, fragmentShader);
     // uniforms[0] = {type:5,size:2,name:"uInput"}
     // uniforms["uInput"] = 32
     this.uniforms = this.getUniforms();
@@ -426,14 +452,15 @@ export class GpuProgram {
     return uniforms;
   }
 
-  blit(output = null) {
+  blit(output = null, draw_points = false) {
     let gl = this.gl;
     let w = output && output.width || gl.drawingBufferWidth;
     let h = output && output.height || gl.drawingBufferHeight;
     let vp = output && output.viewport || { x: 0, y: 0, w, h };
+    let type = draw_points ? gl.POINTS : gl.TRIANGLES;
     gl.viewport(vp.x, vp.y, vp.w, vp.h);
     gl.bindFramebuffer(gl.FRAMEBUFFER, output && output.fbo || null);
-    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0);
+    gl.drawElements(type, this.webgl.num_points, gl.UNSIGNED_INT, 0);
   }
 
   static createProgram(gl, vertexShader, fragmentShader) {
@@ -503,8 +530,10 @@ export class GpuTransformProgram {
     channels = 1,
     vshader,
     fshader,
+    draw_points = false,
   } = {}) {
     this.glctx = glctx;
+    this.draw_points = draw_points;
     width = width || size;
     height = height || size;
     this.output = width * height ?
@@ -530,7 +559,7 @@ export class GpuTransformProgram {
     let gl_fshader = GpuProgram.createShader(
       gl, gl.FRAGMENT_SHADER, fshader || FSHADER_DEFAULT);
 
-    this.program = new GpuProgram(gl, gl_vshader, gl_fshader);
+    this.program = new GpuProgram(this.glctx, gl_vshader, gl_fshader);
   }
 
   exec(args = {}, output = this.output) {
@@ -539,7 +568,7 @@ export class GpuTransformProgram {
     let gp = this.program;
     gp.bind();
     this.bindArgs(args);
-    gp.blit(output);
+    gp.blit(output, this.draw_points);
     this.glctx.checkError();
   }
 

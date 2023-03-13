@@ -17,24 +17,13 @@ let keyboardHandlers = {};
 let vTimeBarAnimationId = 0;
 let selectedFiles = [];
 let currentFileId = 0;
+let vconf = vargs.vconf;
 
-let config = {
-  size: vargs.FFT_SIZE,
-  audio: {
-    channelCount: 1,
-    sampleRate: vargs.SAMPLE_RATE | 0,
-  },
-};
-
-window.onload = () => void main();
+window.onload = () => main();
+vconf.onchange = updateConf;
 
 function main() {
-  canvas.width = vargs.IMAGE_SIZE;
-  canvas.height = vargs.IMAGE_SIZE;
-  log.i('Image size:', vargs.IMAGE_SIZE);
-  log.i('Sample rate:', vargs.SAMPLE_RATE, 'Hz');
-  log.i('A4 note:', vargs.A4_FREQ, 'Hz');
-  log.i('FFT size:', vargs.FFT_SIZE, '=', vargs.FFT_SIZE / vargs.SAMPLE_RATE * 1000 | 0, 'ms');
+  resizeCanvas();
   setKeyboardHandlers();
   setMouseHandlers();
   setRecordingHandler();
@@ -42,6 +31,23 @@ function main() {
   setPlayButtonHandler();
   setHashChangeHandler();
   divStats.textContent = 'Select a file or use mic.';
+}
+
+function updateConf(arg) {
+  if (arg == 'IMAGE_SIZE')
+    resizeCanvas();
+  if (arg == 'DB_RANGE' || arg == 'ACF_RGB' || arg == 'ACF_DYN_LOUDNESS'
+    || arg == 'H_GRAD' || arg == 'GRAD_ZOOM' || arg == 'NUM_SAMPLES'
+    || arg == 'USE_DCT')
+    audioController?.drawFrame();
+}
+
+function resizeCanvas() {
+  let n = vconf.IMAGE_SIZE;
+  confirm.IMAGE_SIZE = n;
+  canvas.width = n;
+  canvas.height = n;
+  log.i('Image size:', n);
 }
 
 function setHashChangeHandler() {
@@ -64,7 +70,7 @@ function setPlayButtonHandler() {
 }
 
 function setLogsHandler() {
-  if (!vargs.SHOW_LOGS)
+  if (!vconf.SHOW_LOGS)
     btnLogs.style.display = 'none';
   else
     btnLogs.onclick = () => log.download();
@@ -73,7 +79,7 @@ function setLogsHandler() {
 function setRecordingHandler() {
   let videoStream, audioStream, recorder;
 
-  if (!vargs.REC_FRAMERATE)
+  if (!vconf.REC_FRAMERATE)
     btnRec.style.display = 'none';
 
   btnRec.onclick = async () => {
@@ -93,7 +99,7 @@ function setRecordingHandler() {
       a.click();
       recorder = null;
     } else {
-      videoStream = canvas.captureStream(vargs.REC_FRAMERATE);
+      videoStream = canvas.captureStream(vconf.REC_FRAMERATE);
       audioStream = getAudioController().audioStream;
       recorder = new MediaFileRecorder(audioStream, videoStream);
       recorder.startRecording();
@@ -116,8 +122,12 @@ function setMouseHandlers() {
       let controller = getAudioController();
       await controller.start(blob);
     } else {
-      micAudioStream = await navigator.mediaDevices.getUserMedia(
-        { audio: config.audio });
+      micAudioStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: vconf.SAMPLE_RATE | 0,
+        }
+      });
       if (micAudioStream) {
         recorder = new MediaFileRecorder(micAudioStream);
         recorder.startRecording();
@@ -217,8 +227,11 @@ function getAudioController() {
   if (audioController)
     return audioController;
 
+  let fft = vconf.FFT_SIZE;
+  log.i('FFT size:', fft, '=', fft / vconf.SAMPLE_RATE * 1000 | 0, 'ms');
+
   audioController = new AudioController(canvas, {
-    fftSize: config.size,
+    fftSize: fft,
     stats: divStats,
   });
 
@@ -265,7 +278,7 @@ function startUpdatingTimeBar() {
     vTimeBar.style.left = '';
   } else {
     let dt = timestamp / duration; // 0..1
-    dt *= vargs.NUM_STRIPES; dt -= Math.floor(dt);
+    dt *= vconf.NUM_STRIPES; dt -= Math.floor(dt);
     let px = (dt * canvas.clientWidth).toFixed(2) + 'px';
     vTimeBar.style.width = '';
     vTimeBar.style.height = '';

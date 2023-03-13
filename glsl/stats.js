@@ -7,7 +7,7 @@ import { GpuTransformProgram, GpuFrameBuffer } from "../webgl2.js";
 //
 // Input: NxNx1 texture. Must be a square.
 export class GpuStatsProgram extends GpuTransformProgram {
-  constructor(webgl, { size }) {
+  constructor(webgl, { size, prep }) {
     super(webgl, {
       fshader: `
         in vec2 vTex;
@@ -21,10 +21,12 @@ export class GpuStatsProgram extends GpuTransformProgram {
           return textureSize(uData, 0).x;
         }
 
+        ${prep || `float prep(vec4 t) { return dot(t, uMask); }`}
+
         vec4 fetch(vec2 v) {
           vec4 s = texture(uData, v);
           if (size() < N/2) return s;
-          float d = dot(s, uMask);
+          float d = prep(s);
           return vec4(d, d, d, 0.0);
         }
 
@@ -88,6 +90,8 @@ export class GpuStatsProgram extends GpuTransformProgram {
       let res = i == n - 2 ? output : a[n - i - 2];
       super.exec({ uData: src, uMask }, res);
     }
+
+    return output;
   }
 }
 

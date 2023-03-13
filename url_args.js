@@ -1,45 +1,40 @@
 let q_args = new URLSearchParams(location.search);
 let args_info = [];
+let gui = window.dat && new dat.GUI({ autoPlace: true });
+let log2 = Math.log2;
 
-export const args = () => console.log(args_info.join('\n'));
+export const vconf = { onchange: null };
 
 // Dynamic args.
 
-export const H_TACF = h_strarg('tacf');
+define_arg('H_TACF', 'tacf', false);
+define_arg('H_GRAD', 'grad', false);
+define_arg('GRAD_ZOOM', 'gzoom', 3.5, { min: 0, max: 5, step: 0.01 });
+define_arg('DEBUG', 'dbg', false);
+define_arg('SHOW_LOGS', 'log', false);
+define_arg('REC_FRAMERATE', 'fps', 0, { max: 60 });
+define_arg('IMAGE_SIZE', 'img', 2048, { min: 1, max: 4096, fix: x => 2 ** (log2(x) | 0) });
+define_arg('FFT_SIZE', 'fft', 2048, { min: 1, max: 4096, fix: x => 2 ** (log2(x) | 0) });
+define_arg('SAMPLE_RATE', 'sr', 12000, { min: 3600, max: 48000 });
+define_arg('DB_RANGE', 'db', -25, { min: -50, max: 50 });
+define_arg('ACF_DYN_LOUDNESS', 'dyn', false);
+define_arg('ACF_POLAR', 'polar', false);
+define_arg('ACF_RGB', 'rgb', true);
+define_arg('HANN_WINDOW', 'hann', true);
+define_arg('NUM_STRIPES', 'ns', 1, { max: 8 });
+define_arg('NUM_SAMPLES', 'rs', 16, { min: 1, max: 64 });
+define_arg('USE_DCT', 'dct', false);
+
+if (gui) {
+  gui.useLocalStorage = true;
+}
 
 // Static args.
 
-export const DEBUG = numarg('dbg', 0);
-export const FFT_SIZE = numarg('fft', 2048); // 2048 is the max on Android
 export const SHADER = strarg('s', 'acf');
-export const USE_DCT = numarg('dct', 0);
-export const A4_FREQ = numarg('a4', 432);
-export const SAMPLE_RATE = strarg('sr', '48000');
-export const IMAGE_SIZE = numarg('img', 2048);
 export const USE_MOUSE = numarg('mouse', 1);
-export const HANN_WINDOW = numarg('hann', 1);
 export const SHOW_MIC = numarg('mic', 0);
-export const NUM_STRIPES = numarg('ns', 1);
 export const ZOOM = numarg('zoom', 1);
-
-export const DB_RANGE = strarg('db', 50);
-export const ACF_R0 = numarg('acf.r0', 0.0);
-export const ACF_POLAR = numarg('acf.polar', 0);
-export const ACF_MAX_SIZE = numarg('acf.max', 4096);
-export const ACF_RGB = numarg('rgb', 1);
-export const ACF_DYN_LOUDNESS = numarg('acf.dyn', 1);
-// FFT |amp|^2 decay after one full FFT frame (e.g. 2048 samples).
-// The rationale is that FFT buffer corresponds to the ear's audio
-// buffer of ~100ms.
-export const ACF_LOUDNESS_DECAY = numarg('decay', 0.1);
-export const ACF_MUTE_RANGE = numarg('mute', 0);
-
-export const REC_FRAMERATE = numarg('rec.fps', 0);
-export const USE_ALPHA_CHANNEL = numarg('alpha', 0);
-export const FBO_MAX_SIZE = numarg('fbo.max', 27);
-export const SHOW_LOGS = numarg('log', 0);
-export const FLOAT_PRECISION = strarg('fp', 'highp');
-export const INT_PRECISION = strarg('ip', 'highp');
 
 function strarg(name, defval = '', { regex, parse } = {}) {
   let value = q_args.get(name);
@@ -58,11 +53,33 @@ function numarg(name, defval = 0) {
   return +strarg(name, defval + '', /^\d+(\.\d+)?$/);
 }
 
-function h_strarg(name) {
-  return {
-    get() {
-      let h_args = new URLSearchParams(location.hash.slice(1));
-      return h_args.get(name);
+function define_arg(tag, url_param, value = 0, { min = value, max = value, step = 1, fix } = {}) {
+  let ctr, title = tag + ' (' + url_param + ')';
+
+  switch (typeof value) {
+    case 'boolean':
+      vconf[tag] = numarg(url_param, +value);
+      ctr = gui.add(vconf, tag, 0, 1, 1).name(title);
+      ctr.onChange(() => onArgChange(ctr, tag, fix));
+      return vconf[tag];
+    case 'number':
+      vconf[tag] = numarg(url_param, value);
+      ctr = gui.add(vconf, tag, min, max, step).name(title)
+      ctr.onChange(() => onArgChange(ctr, tag, fix));
+      return vconf[tag];
+    default:
+      return vconf[tag] = strarg(url_param, value);
+  }
+}
+
+function onArgChange(ctr, tag, fix) {
+  let value = vconf[tag];
+  if (fix) {
+    value = fix(value);
+    if (value != vconf[tag]) {
+      ctr.setValue(value);
+      return;
     }
-  };
+  }
+  vconf.onchange?.(tag);
 }

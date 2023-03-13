@@ -6,16 +6,21 @@ import { textureUtils, shaderUtils, colorUtils, complexMath } from "./basics.js"
 import { GpuDownsampler } from './downsampler.js';
 import { GpuStatsFlat, GpuStatsProgram } from './stats.js';
 
+const vconf = vargs.vconf;
+
 export class GpuAcfVisualizerProgram {
   constructor(webgl, { fft_size, img_size }) {
+    log.i('Initializing ACF renderer');
+    img_size = Math.min(img_size, fft_size);
+
     this.webgl = webgl;
-    this.flat = !vargs.ACF_POLAR;
+    this.flat = !vconf.ACF_POLAR;
     this.show_acf = vargs.SHADER == 'acf';
 
-    let size = Math.min(fft_size, vargs.ACF_MAX_SIZE);
+    let size = fft_size;
     let aa = Math.log2(size / img_size);
 
-    log.assert(fft_size >= img_size);
+    log.assert(fft_size >= img_size, 'Img is too large');
     log.assert(aa == Math.floor(aa));
 
     this.gpuACF = new GpuACF(webgl, { fft_size, num_frames: size });
@@ -56,7 +61,7 @@ export class GpuAcfVisualizerProgram {
     }
 
     if (output != GpuFrameBuffer.DUMMY) {
-      if (vargs.ACF_DYN_LOUDNESS) {
+      if (vconf.ACF_DYN_LOUDNESS) {
         this.smooth_max.exec(
           this.acfBufferAA,
           this.fb_smooth_max);
@@ -84,6 +89,7 @@ export class GpuAcfVisualizerProgram {
 
       this.heightMap.exec({
         uFlat: this.flat,
+        uDynLoud: vconf.ACF_DYN_LOUDNESS,
         uACF: this.acfBufferAA,
         uSmoothMax: this.fb_smooth_max,
         uRMax: this.fb_r_max,
@@ -99,9 +105,14 @@ export class GpuAcfVisualizerProgram {
       this.colorizer.exec({
         uFlat: this.flat,
         uHeightMap: this.heightMapAA,
+        uDBRange: vconf.DB_RANGE,
+        uRGB: vconf.ACF_RGB,
+        uGrad: vconf.H_GRAD,
+        uGradZoom: vconf.GRAD_ZOOM,
+        uNumSamples: vconf.NUM_SAMPLES,
       }, output);
 
-      if (vargs.DEBUG) {
+      if (vconf.DEBUG) {
         this.stats.exec({ uData: this.fb_smooth_max },
           this.fb_smooth_max_stats);
 
@@ -122,7 +133,7 @@ class GpuACF {
     this.freq_rem = 0;
     this.num_frames = num_frames;
 
-    this.fft = vargs.USE_DCT ?
+    this.fft = vconf.USE_DCT ?
       new GpuDCT(webgl, { width: num_frames, height: fft_size, layout: 'cols' }) :
       new GpuFFT(webgl, { width: num_frames, height: fft_size, layout: 'cols' });
 
@@ -228,7 +239,7 @@ class GpuACF {
 
         void main() {
           float hw = hann(vTex.y - 0.5 / N);
-          if (${!vargs.HANN_WINDOW}) hw = 1.0;
+          if (${!vconf.HANN_WINDOW}) hw = 1.0;
           v_FragColor = hw * texture(uWave, vTex);
         }
       `,
@@ -277,11 +288,16 @@ class GpuACF {
     this.fft.exec({ uInput: t2 }, t3);
     this.sqr_abs.exec({ uInput: t3 }, t2);
 
-    if (vargs.ACF_RGB) {
+    if (vconf.ACF_RGB) {
       this.freq_colors.exec({ uFFT: t2 }, this.fft_a);
       this.dot_prod.exec({ uInput: this.fft_a, uProd: [1, 0, 0, 0] }, this.fft_r);
       this.dot_prod.exec({ uInput: this.fft_a, uProd: [0, 1, 0, 0] }, this.fft_g);
       this.dot_prod.exec({ uInput: this.fft_a, uProd: [0, 0, 1, 0] }, this.fft_b);
+    } else {
+      this.fft_a.clear();
+      this.fft_r.clear();
+      this.fft_g.clear();
+      this.fft_b.clear();
     }
 
     // In general, ACF[X] needs to do inverseFFT[S]
@@ -289,14 +305,14 @@ class GpuACF {
     // real, inverseFFT here is equivalent to FFT.
     if (this.show_acf) {
       this.fft.exec({ uInput: t2 }, t2);
-      if (vargs.ACF_RGB) {
+      if (vconf.ACF_RGB) {
         this.fft.exec({ uInput: this.fft_r }, this.fft_r);
         this.fft.exec({ uInput: this.fft_g }, this.fft_g);
         this.fft.exec({ uInput: this.fft_b }, this.fft_b);
       }
     }
 
-    if (vargs.H_TACF.get() == '1') {
+    if (vconf.H_TACF) {
       for (let t of [t2]) {
         this.transpose.exec({ uInput: t }, t1);
         // this.hann_window.exec({ uWave: t1 }, t2);
@@ -332,19 +348,19 @@ class GpuHeightMapProgram extends GpuTransformProgram {
         uniform sampler2D uBMax;
         uniform sampler2D uAMax;
         uniform bool uFlat;
+        uniform bool uDynLoud;
 
         const float N = float(${size});
-        const float PI = ${Math.PI};
-        const float R0 = float(${vargs.ACF_R0});
+        const float R0 = 0.0;
 
         ${shaderUtils}
         ${textureUtils}
 
         vec4 h_acf(vec2 ta) {
-          float t_max = mix(1.0 - 0.5/N, ta.x, float(${vargs.ACF_DYN_LOUDNESS}));
+          float t_max = mix(1.0 - 0.5/N, ta.x, float(uDynLoud));
           vec4 s_max = texture(uSmoothMax, vec2(t_max, 0.0)).xxxx;
 
-          if (${!vargs.ACF_DYN_LOUDNESS}) {
+          if (!uDynLoud) {
             vec4 r = texture(uRMax, vec2(0.0));
             vec4 g = texture(uGMax, vec2(0.0));
             vec4 b = texture(uBMax, vec2(0.0));
@@ -365,10 +381,10 @@ class GpuHeightMapProgram extends GpuTransformProgram {
           float r = abs(length(v) - R0);
           if (r > 0.99) return vec4(0.0);
           float arg = atan2(v.y, v.x);
-          float a = ${!!vargs.USE_DCT} ?
+          float a = ${!!vconf.USE_DCT} ?
             abs(mod(arg/PI + 2.5, 2.0) - 1.0) :
             -0.25 + 0.5 * arg / PI;
-          a *= 2.0; // vertical symmetry
+          // a *= 2.0; // vertical symmetry
           return h_acf(vec2(r, a));
         }
 
@@ -376,7 +392,7 @@ class GpuHeightMapProgram extends GpuTransformProgram {
           float r = vTex.x;
           float t = r;
           float a = vTex.y / float(${vargs.ZOOM});
-          if (${!vargs.USE_DCT}) a *= 0.5;
+          if (${!vconf.USE_DCT}) a *= 0.5;
           return h_acf(vec2(t, a));
         }
 
@@ -398,56 +414,79 @@ class GpuColorizer extends GpuTransformProgram {
         const float N = ${size}.0;
         const float R_MAX = 0.9;
         const bool CIRCLE = true;
-        const float LOUDNESS_RANGE = float(${vargs.DB_RANGE / 20});
-
-        ${colorUtils}
-
         const vec2 dx = vec2(1.0, 0.0) / N;
         const vec2 dy = vec2(0.0, 1.0) / N;
 
+        uniform int uNumSamples;
+        uniform bool uGrad;
+        uniform float uGradZoom;
         uniform bool uFlat;
+        uniform bool uRGB;
+        uniform float uDBRange;
         uniform sampler2D uHeightMap;
 
+        ${colorUtils}
         ${shaderUtils}
+        ${textureUtils}
 
-        vec4 h_acf() {
-          return texture(uHeightMap, vTex);
+        vec4 h_acf(vec2 vTex) {
+          return textureGauss(uHeightMap, vTex);
+        }
+
+        vec4 g_acf(vec2 ta) {
+          float f = 0.5 * pow(10.0, uGradZoom);
+          vec4 lt = h_acf(ta);
+          vec4 rt = h_acf(ta + dx);
+          vec4 lb = h_acf(ta + dy);
+          vec4 rb = h_acf(ta + dx + dy);
+          vec4 gx = f * (rt + rb - lt - lb);
+          vec4 gy = f * (rt - rb + lt - lb);
+          vec4 gz = 1.0 / sqrt(1.0 + gx*gx + gy*gy);
+          return gz;
         }
 
         float loudness(float x) {
-          return x <= 0.0 ? 0.0 : 1.0 + log10(x) / LOUDNESS_RANGE;
+          return x <= 0.0 ? 0.0 : 1.0 + log10(x) / uDBRange * 20.0;
         }
 
-        vec3 h_rgb() {
-          vec4 h = h_acf();
-          float sat = ${vargs.DB_RANGE <= 0} ?
-            1.0 : 1.0 - h.w * h.w;
-          vec3 c = ${!!vargs.ACF_RGB || vargs.DB_RANGE <= 0}
-            ? abs(h.xyz) : abs(h.w) * vec3(1.0, 1.0, 1.0);
-          if (${vargs.DB_RANGE > 0}) {
-            c.r = loudness(c.r);
-            c.g = loudness(c.g);
-            c.b = loudness(c.b);
-            c = clamp(c, 0.0, 1.0);
+        vec3 h_rgb(vec2 vTex) {
+          vec4 h = uGrad ? g_acf(vTex) : h_acf(vTex);
+          float sat = uDBRange <= 0.0 ? 1.0 : 1.0 - h.w * h.w;
+          vec3 c = uRGB ? abs(h.xyz) : abs(h.www);
+
+          if (uDBRange > 0.0) {
+            c.r = loudness(c.r) * 4.0;
+            c.g = loudness(c.g) * 2.0;
+            c.b = loudness(c.b) * 1.0;
+            c = clamp(c * 0.25, 0.0, 1.0);
           } else {
             const mat3 mx = mat3(
               16.0, 4.0, 1.0,
               0.0, 1.0, 0.0,
               1.0, 2.0, 8.0);
             c = mx * c;
+            if (uDBRange < 0.0)
+              c *= -uDBRange / 20.0;
           }
+
           return mix(vec3(1.0), c, sat);
+        }
+
+        vec3 h_rgb_sampled(vec2 vTex, int n) {
+          const vec2 dxdy = (dx + dy) * sqrt(2.0);
+          vec3 sum = vec3(0.0);
+          for (int i = 0; i < n; i++) {
+            vec2 vTex2 = vTex + fibb_spiral(i, n) * dxdy;
+            sum += h_rgb(vTex2);
+          }
+          return sum / float(n);
         }
 
         vec4 rgba() {
           float r = length(v);
           if (r > 0.99 && CIRCLE && !uFlat)
             return vec4(0.0);
-          vec3 rgb = h_rgb();
-
-          if (${vargs.DB_RANGE < 0})
-             rgb *= -LOUDNESS_RANGE;
-
+          vec3 rgb = h_rgb_sampled(vTex, uNumSamples);
           vec4 rgba = vec4(rgb, 1.0);
           // if (CIRCLE && !uFlat)
           //   rgba *= smoothstep(1.0, R_MAX, r);
