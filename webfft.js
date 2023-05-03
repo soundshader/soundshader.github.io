@@ -185,7 +185,7 @@ export class FFT {
 
     for (let k = 0; k < size; k++) {
       let r = 0;
-      for (let i = 0; 2 ** i < size; i++)
+      for (let i = 0; (1 << i) < size; i++)
         r = (r << 1) | (k >> i) & 1;
       revidx[k] = r;
     }
