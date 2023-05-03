@@ -85,6 +85,24 @@ export const shaderUtils = `
     return x < a ? 0.0 : x > b ? 1.0 : hann((x - a) / (b - a) * 0.5);
   }
 
+  // |f|=0..1 -> 0..1 (b=0..1)
+  // rcosf(f, 1.0) = hann((f + 1)/2)
+  // https://en.wikipedia.org/wiki/Raised-cosine_filter
+  float rcosf(float f, float b) {
+    float b0 = 0.5 - 0.5 * b;
+    float b1 = 0.5 + 0.5 * b;
+    float f0 = abs(f);
+
+    if (f0 < b0) return 1.0;
+    if (f0 > b1) return 0.0;
+
+    return 0.5 + 0.5 * cos(PI/b * (f0 - b0));
+  }
+
+  float rcosf2(float x, float b, float x_min, float x_max) {
+    return rcosf((x - x_min) / (x_max - x_min) * 2.0 - 1.0, 2.0 * b / (x_max - x_min));
+  }
+
   float gauss(float x, float sigma) {
     const float SQRT_2PI = ${Math.sqrt(2 * Math.PI)};
     return exp(-0.5 * sqr(x / sigma)) / (SQRT_2PI * sigma);

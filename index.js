@@ -36,9 +36,9 @@ function main() {
 function updateConf(arg) {
   if (arg == 'IMAGE_SIZE')
     resizeCanvas();
-  if (arg == 'DB_RANGE' || arg == 'ACF_RGB' || arg == 'ACF_DYN_LOUDNESS'
-    || arg == 'H_GRAD' || arg == 'GRAD_ZOOM' || arg == 'NUM_SAMPLES'
-    || arg == 'USE_DCT')
+  let args = ['FREQ_MIN', 'DB_MAX', 'DB_LOG', 'ACF_RGB', 'ACF_DYN_LOUDNESS',
+    'H_GRAD', 'GRAD_ZOOM', 'NUM_SAMPLES', 'USE_DCT', 'N_SYMM', 'HZ_HUE'];
+  if (args.indexOf(arg) >= 0)
     audioController?.drawFrame();
 }
 

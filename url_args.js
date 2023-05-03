@@ -7,23 +7,27 @@ export const vconf = { onchange: null };
 
 // Dynamic args.
 
+define_arg('IMAGE_SIZE', 'img', 2048, { min: 1, max: 4096, fix: x => 2 ** (log2(x) | 0) });
+define_arg('FFT_SIZE', 'fft', 2048, { min: 1, max: 4096, fix: x => 2 ** (log2(x) | 0) });
+define_arg('SAMPLE_RATE', 'sr', 12000, { min: 3600, max: 48000 });
+define_arg('DB_MAX', 'db_max', 5, { min: 0, max: 100 });
+define_arg('DB_LOG', 'db_log', false);
+define_arg('HZ_HUE', 'hue', false);
+define_arg('FREQ_MIN', 'hz_min', 0, { min: 0, max: 3000 });
+define_arg('ACF_DYN_LOUDNESS', 'dyn', false);
+define_arg('ACF_RGB', 'rgb', true);
+define_arg('HANN_WINDOW', 'hann', true);
+define_arg('USE_DCT', 'dct', false);
+define_arg('N_SYMM', 'sym', 1, { min: 1, max: 12 });
+
 define_arg('H_TACF', 'tacf', false);
 define_arg('H_GRAD', 'grad', false);
 define_arg('GRAD_ZOOM', 'gzoom', 3.5, { min: 0, max: 5, step: 0.01 });
 define_arg('DEBUG', 'dbg', false);
 define_arg('SHOW_LOGS', 'log', false);
 define_arg('REC_FRAMERATE', 'fps', 0, { max: 60 });
-define_arg('IMAGE_SIZE', 'img', 2048, { min: 1, max: 4096, fix: x => 2 ** (log2(x) | 0) });
-define_arg('FFT_SIZE', 'fft', 2048, { min: 1, max: 4096, fix: x => 2 ** (log2(x) | 0) });
-define_arg('SAMPLE_RATE', 'sr', 12000, { min: 3600, max: 48000 });
-define_arg('DB_RANGE', 'db', -25, { min: -50, max: 50 });
-define_arg('ACF_DYN_LOUDNESS', 'dyn', false);
-define_arg('ACF_POLAR', 'polar', false);
-define_arg('ACF_RGB', 'rgb', true);
-define_arg('HANN_WINDOW', 'hann', true);
 define_arg('NUM_STRIPES', 'ns', 1, { max: 8 });
 define_arg('NUM_SAMPLES', 'rs', 16, { min: 1, max: 64 });
-define_arg('USE_DCT', 'dct', false);
 
 if (gui) {
   gui.useLocalStorage = true;

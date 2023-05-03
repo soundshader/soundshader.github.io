@@ -27,11 +27,12 @@ const DEFAULT_CONFIG = `
   const int IMG_H = 1024;
   const int FREQ_MARKERS = 10;
   const int TIME_MARKERS = 10;
-  const float PI = radians(180.0);
 
+  // ts = -0.5..0.5
   vec2 wavelet(float ts, float freq_hz) {
     float width = 25.0 / freq_hz + 0.025;
-    float amp = 1.0 - hann_step(abs(float(ts)), 0.0, width * 0.5);
+    // float amp = 1.0 - hann_step(abs(ts), 0.0, width * 0.5);
+    float amp = rcosf2(ts, width*0.1, -width*0.5, width*0.5);
     float phase = ts * freq_hz * PI * 2.0;
     float re = cos(phase);
     float im = sin(phase);
@@ -175,7 +176,7 @@ async function initWebGL() {
         vec2 u = texture(uInput1, vTex).xy;
         vec2 v = texture(uInput2, vTex).xy;
 
-        v_FragColor = vec4(imul(u, v), 0.0, 0.0);
+        v_FragColor = vec4(imul(u, v*vec2(1.0, -1.0)), 0.0, 0.0);
       }
     `
   });
