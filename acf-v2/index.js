@@ -2,6 +2,8 @@ import { FFT } from '/webfft.js'
 
 const EPS = 1e-6;
 const DISK = 1;
+const SYMM = 1;
+const TSHIFT = 0.01;
 const ACF = 1;
 
 let ts_min = 0.0;
@@ -223,6 +225,7 @@ async function drawACF(canvas, audio, num_frames) {
   let ctx = canvas.getContext('2d');
   let fft_data = new Float32Array(num_frames * fs);
   let acf_data = new Float32Array(4 * num_frames * fs);
+  let res_data = new Float32Array(4 * num_frames * fs);
 
   for (let t = 0; t < num_frames; t++) {
     let frame = new Float32Array(fs);
@@ -237,18 +240,26 @@ async function drawACF(canvas, audio, num_frames) {
     for (let f = 0; f < fs; f++)
       for (let i = 0; i < 3; i++)
         acf_data[t * fs + f + i * num_frames * fs] = fft_frame[f] * freq_colors[4 * f + i];
+  }
 
-    if (ACF) {
+  if (!ACF) {
+    res_data.set(acf_data);
+  } else {
+    let acf_frame = (data, i, t) => data
+      .subarray(i * num_frames * fs, (i + 1) * num_frames * fs)
+      .subarray(t * fs, (t + 1) * fs);
+
+    for (let t = 0; t < num_frames; t++) {
       for (let i = 0; i < 3; i++) {
-        let acf_frame = acf_data
-          .subarray(i * num_frames * fs, (i + 1) * num_frames * fs)
-          .subarray(t * fs, (t + 1) * fs);
-        computeACF(acf_frame, acf_frame);
+        let f1 = acf_frame(acf_data, i, t);
+        let f2 = acf_frame(acf_data, i, Math.round(t + (1 - TSHIFT) * num_frames) % num_frames);
+        let f3 = acf_frame(res_data, i, t);
+        xcorrelation(f1, f2, f3);
       }
     }
   }
 
-  await drawFrames(ctx, acf_data, num_frames);
+  await drawFrames(ctx, res_data, num_frames);
 }
 
 async function drawFrames(ctx, rgba_data, num_frames) {
@@ -285,7 +296,7 @@ async function drawFrames(ctx, rgba_data, num_frames) {
         if (r >= 1) continue;
         t = Math.min(num_frames - 1, r * num_frames | 0);
         f = ((a / Math.PI + 1) / 2 + 0.75) * fs;
-        f = f * 2; // vertical symmetry
+        f = f * SYMM; // vertical symmetry
       }
 
       let f_width = DISK ? num_frames / (t + 1) : 0;
@@ -371,14 +382,21 @@ function computeFFT(input, output) {
   dcheck(is_even(output));
 }
 
-// intput[i] = abs(FFT[i])^2
-// output[i] = abs(ACF[i])
-function computeACF(input, output) {
-  dcheck(input.length == output.length);
-  let temp = FFT.expand(input);
-  let temp2 = FFT.forward(temp);
+// https://en.wikipedia.org/wiki/Cross-correlation
+function xcorrelation(input1, input2, output) {
+  dcheck(input1.length == output.length);
+  dcheck(input2.length == output.length);
+  let fft1 = FFT.forward(FFT.expand(input1))
+  let fft2 = FFT.forward(FFT.expand(input2))
   // dcheck(is_real(temp2));
-  FFT.abs(temp2, output);
+  for (let i = 0; i < output.length; i++) {
+    let re1 = fft1[2 * i], im1 = fft1[2 * i + 1];
+    let re2 = fft2[2 * i], im2 = fft2[2 * i + 1];
+    // (re, im) = (re1, im1) * (re2, -im2)
+    let re = +re1 * re2 + im1 * im2;
+    let im = -re1 * im2 + re2 * im1;
+    output[i] = Math.sqrt(Math.sqrt(re * re + im * im));
+  }
   // dcheck(is_even(output));
 }
 

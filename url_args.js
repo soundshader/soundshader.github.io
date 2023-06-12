@@ -31,6 +31,7 @@ define_arg('NUM_SAMPLES', 'rs', 16, { min: 1, max: 64 });
 
 if (gui) {
   gui.useLocalStorage = true;
+  gui.close();
 }
 
 // Static args.
