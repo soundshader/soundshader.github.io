@@ -6,7 +6,7 @@
 
 Female vocal         | David Parsons        | Piano                   | Bird
 -------------------- | -------------------- | ----------------------- | --------------------
-![](pics/song-2.jpg) | ![](pics/bowl-3.jpg) | ![](pics/piano-p.jpg)   | ![](pics/bird-2.jpg)
+![](pics/song-2.jpg) | ![](pics/bowl-1.jpg) | ![](pics/piano-p.jpg)   | ![](pics/bird-2.jpg)
 
 More examples: [soundshader.github.io/gallery](https://soundshader.github.io/gallery/) (beware of large images).
 
